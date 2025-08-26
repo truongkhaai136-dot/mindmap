@@ -217,8 +217,6 @@
   <button id="panel-toggle-btn">«</button>
 
   <script>
-    // === PHẦN SCRIPT ĐÃ ĐƯỢC CẬP NHẬT HOÀN TOÀN ===
-    
     const editor = document.getElementById('editor');
     const canvas = document.getElementById('canvas');
     const wires = document.getElementById('wires');
@@ -230,17 +228,25 @@
     const appContainer = document.getElementById('app-container');
     const panelToggleBtn = document.getElementById('panel-toggle-btn');
 
-    // === BẢNG MÀU MỚI DO BẠN CUNG CẤP ===
     const ROOT_NODE_PALETTE = ['#d586f4', '#c3e9cc', '#f3a88f', '#a6abe7', '#eedc96', '#f6f3ce', '#aae496'];
-    const MAIN_BRANCH_PALETTE = ['#FAFAD2', '#B0E0E6', '#FFFACD', '#D8BFD8', '#FFDAB9', '#AAF0D1', '#EEDFCC', '#FFF5E1'];
+    
+    // === BẢNG MÀU ĐÃ ĐƯỢC SẮP XẾP LẠI THEO ĐÚNG YÊU CẦU CỦA BẠN ===
+    // 1. Học Ngữ Pháp -> #B0E0E6 (Powder Blue)
+    // 2. Học Từ Vựng  -> #D8BFD8 (Thistle)
+    // 3. Học Phát Âm  -> #FFFACD (Lemon Chiffon)
+    const MAIN_BRANCH_PALETTE = [
+        '#B0E0E6', // Dành cho "Học Ngữ Pháp"
+        '#D8BFD8', // Dành cho "Học Từ Vựng"
+        '#FFFACD', // Dành cho "Học Phát Âm"
+        '#FAFAD2', '#FFDAB9', '#AAF0D1', '#EEDFCC', '#FFF5E1' // Các màu còn lại dự phòng
+    ];
 
     let scale = 1, panX = 40, panY = 40;
     let isPanning = false, startPanX = 0, startPanY = 0;
     let presentationMode = false;
     let mindmapTree = {};
-    let rootNodeColor = ROOT_NODE_PALETTE[0]; // Màu mặc định ban đầu
+    let rootNodeColor = ROOT_NODE_PALETTE[0];
 
-    // === HÀM HỖ TRỢ CHUYỂN ĐỔI HEX SANG HSL ===
     function hexToHsl(hex) {
       if (!hex) return null;
       let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -254,7 +260,7 @@
       let h, s, l = (max + min) / 2;
 
       if (max == min) {
-        h = s = 0; // Grayscale
+        h = s = 0;
       } else {
         let d = max - min;
         s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
@@ -268,7 +274,6 @@
       return { h: h * 360, s: s, l: l };
     }
 
-    // === HÀM LẤY MÀU MỚI, THAY THẾ CHO `hslForLevel` ===
     function getNodeColor(level, branchIndex) {
         if (level === 0) {
             return rootNodeColor;
@@ -281,11 +286,10 @@
         }
 
         const baseHsl = hexToHsl(baseHexColor);
-        if (!baseHsl) return '#CCCCCC'; // Màu dự phòng
+        if (!baseHsl) return '#CCCCCC';
 
-        // Giảm 8% độ sáng cho mỗi cấp độ sâu hơn
         let newLightness = baseHsl.l * 100 - (level - 1) * 8;
-        newLightness = Math.max(30, newLightness); // Đảm bảo không quá tối
+        newLightness = Math.max(30, newLightness);
 
         return `hsl(${baseHsl.h}, ${baseHsl.s * 100}%, ${newLightness}%)`;
     }
@@ -456,7 +460,7 @@
         el.style.left = p.x + 'px';
         el.style.top = p.y + 'px';
         el.style.height = p.h + 'px';
-        el.style.background = getNodeColor(node.level, branchIndex); // <-- SỬ DỤNG HÀM MÀU MỚI
+        el.style.background = getNodeColor(node.level, branchIndex);
         el.textContent = node.text;
         
         if (node.level === 0) {
@@ -496,7 +500,6 @@
         if (reparse) {
             const nodes = parseLines(editor.value);
             mindmapTree = buildTree(nodes);
-            // Chọn màu ngẫu nhiên cho nút gốc MỖI KHI CẬP NHẬT
             rootNodeColor = ROOT_NODE_PALETTE[Math.floor(Math.random() * ROOT_NODE_PALETTE.length)];
         }
         const layout = layoutTree(mindmapTree);
