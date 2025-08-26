@@ -230,14 +230,12 @@
 
     const ROOT_NODE_PALETTE = ['#d586f4', '#c3e9cc', '#f3a88f', '#a6abe7', '#eedc96', '#f6f3ce', '#aae496'];
 
-    // === BẢNG MAP MÀU CHÍNH XÁC THEO TÊN NHÁNH ===
     const BRANCH_COLOR_MAP = new Map([
         ['Học Ngữ Pháp', '#B0E0E6'],
         ['Học Từ Vựng',  '#D8BFD8'],
         ['Học Phát Âm',  '#FFFACD']
     ]);
 
-    // Bảng màu dự phòng cho các nhánh không có trong map trên
     const FALLBACK_BRANCH_PALETTE = ['#FAFAD2', '#FFDAB9', '#AAF0D1', '#EEDFCC', '#FFF5E1'];
 
     let scale = 1, panX = 40, panY = 40;
@@ -334,7 +332,9 @@
         .map((raw, idx) => {
           const match = raw.match(/^(\s*)(.*)$/);
           const level = Math.floor((match ? match[1] : '').replace(/\t/g, '  ').length / 2);
-          const content = (match ? match[2] : raw).trim();
+          // === DÒNG SỬA LỖI DUY NHẤT NẰM Ở ĐÂY ===
+          // Thay thế các ký tự khoảng trắng đặc biệt (như non-breaking space) bằng dấu cách thường
+          const content = (match ? match[2] : raw).replace(/\s/g, ' ').trim();
           return { id: idx, level, text: content };
         })
         .filter(n => n.text.length > 0);
@@ -391,8 +391,7 @@
       wires.innerHTML = '';
       const fragment = document.createDocumentFragment();
       [...canvas.querySelectorAll('.node')].forEach(n => n.remove());
-
-      // === LOGIC VẼ VÀ TÍNH MÀU ĐÃ ĐƯỢC VIẾT LẠI HOÀN TOÀN ===
+      
       function render(node, parent, branchIndex, baseBranchColor) {
         if (node.id === 'root') {
              node.children.forEach((child, index) => render(child, node, index, null));
@@ -401,13 +400,11 @@
         if (!node.isVisible) return;
         
         let currentBaseColor = baseBranchColor;
-        // Nếu là nhánh chính (cấp 1), xác định màu gốc cho toàn bộ nhánh
         if (node.level === 1) {
             currentBaseColor = BRANCH_COLOR_MAP.get(node.text) || FALLBACK_BRANCH_PALETTE[branchIndex % FALLBACK_BRANCH_PALETTE.length];
         }
 
         let finalNodeColor = currentBaseColor;
-        // Nếu là nhánh con (cấp > 1), làm đậm màu gốc
         if (node.level > 1) {
             const baseHsl = hexToHsl(currentBaseColor);
             if(baseHsl) {
@@ -417,7 +414,6 @@
             }
         }
         
-        // Xử lý nút gốc (tiêu đề)
         if (node.level === 0) {
             finalNodeColor = rootNodeColor;
         }
@@ -448,7 +444,6 @@
           wires.appendChild(path);
         }
         
-        // Truyền màu gốc xuống cho các nút con
         node.children.forEach(child => render(child, node, branchIndex, currentBaseColor));
       }
       render(root, null, 0, null);
