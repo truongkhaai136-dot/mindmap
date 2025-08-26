@@ -109,7 +109,7 @@
       box-shadow: 0 6px 18px rgba(0,0,0,.35);
       backdrop-filter: blur(4px);
       -webkit-backdrop-filter: blur(4px);
-      color: #1c1c1c; /* Đổi màu chữ mặc định thành màu tối để dễ đọc trên nền sáng */
+      color: #1c1c1c;
       font-weight: 600;
       line-height: 1.45;
       word-wrap: break-word;
@@ -229,17 +229,16 @@
     const panelToggleBtn = document.getElementById('panel-toggle-btn');
 
     const ROOT_NODE_PALETTE = ['#d586f4', '#c3e9cc', '#f3a88f', '#a6abe7', '#eedc96', '#f6f3ce', '#aae496'];
-    
-    // === BẢNG MÀU ĐÃ ĐƯỢC SẮP XẾP LẠI THEO ĐÚNG YÊU CẦU CỦA BẠN ===
-    // 1. Học Ngữ Pháp -> #B0E0E6 (Powder Blue)
-    // 2. Học Từ Vựng  -> #D8BFD8 (Thistle)
-    // 3. Học Phát Âm  -> #FFFACD (Lemon Chiffon)
-    const MAIN_BRANCH_PALETTE = [
-        '#B0E0E6', // Dành cho "Học Ngữ Pháp"
-        '#D8BFD8', // Dành cho "Học Từ Vựng"
-        '#FFFACD', // Dành cho "Học Phát Âm"
-        '#FAFAD2', '#FFDAB9', '#AAF0D1', '#EEDFCC', '#FFF5E1' // Các màu còn lại dự phòng
-    ];
+
+    // === BẢNG MAP MÀU CHÍNH XÁC THEO TÊN NHÁNH ===
+    const BRANCH_COLOR_MAP = new Map([
+        ['Học Ngữ Pháp', '#B0E0E6'],
+        ['Học Từ Vựng',  '#D8BFD8'],
+        ['Học Phát Âm',  '#FFFACD']
+    ]);
+
+    // Bảng màu dự phòng cho các nhánh không có trong map trên
+    const FALLBACK_BRANCH_PALETTE = ['#FAFAD2', '#FFDAB9', '#AAF0D1', '#EEDFCC', '#FFF5E1'];
 
     let scale = 1, panX = 40, panY = 40;
     let isPanning = false, startPanX = 0, startPanY = 0;
@@ -251,17 +250,10 @@
       if (!hex) return null;
       let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
       if (!result) return null;
-
-      let r = parseInt(result[1], 16) / 255;
-      let g = parseInt(result[2], 16) / 255;
-      let b = parseInt(result[3], 16) / 255;
-      
+      let r = parseInt(result[1], 16) / 255, g = parseInt(result[2], 16) / 255, b = parseInt(result[3], 16) / 255;
       let max = Math.max(r, g, b), min = Math.min(r, g, b);
       let h, s, l = (max + min) / 2;
-
-      if (max == min) {
-        h = s = 0;
-      } else {
+      if (max == min) { h = s = 0; } else {
         let d = max - min;
         s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
         switch (max) {
@@ -273,33 +265,11 @@
       }
       return { h: h * 360, s: s, l: l };
     }
-
-    function getNodeColor(level, branchIndex) {
-        if (level === 0) {
-            return rootNodeColor;
-        }
-
-        const baseHexColor = MAIN_BRANCH_PALETTE[branchIndex % MAIN_BRANCH_PALETTE.length];
-
-        if (level === 1) {
-            return baseHexColor;
-        }
-
-        const baseHsl = hexToHsl(baseHexColor);
-        if (!baseHsl) return '#CCCCCC';
-
-        let newLightness = baseHsl.l * 100 - (level - 1) * 8;
-        newLightness = Math.max(30, newLightness);
-
-        return `hsl(${baseHsl.h}, ${baseHsl.s * 100}%, ${newLightness}%)`;
-    }
-
+    
     panelToggleBtn.addEventListener('click', () => appContainer.classList.toggle('panel-closed'));
-
     btnPresent.addEventListener('click', () => {
         presentationMode = !presentationMode;
         btnPresent.classList.toggle('active', presentationMode);
-        
         function setVisibility(node, level) {
             if (presentationMode) node.isVisible = level <= 0;
             else node.isVisible = true;
@@ -309,19 +279,13 @@
         triggerUpdate(false);
     });
 
-    function applyTransform() {
-      canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-    }
-
+    function applyTransform() { canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; }
     viewport.addEventListener('wheel', (e) => {
       e.preventDefault();
       const rect = viewport.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      const mouseBeforeZoomX = (mouseX - panX) / scale;
-      const mouseBeforeZoomY = (mouseY - panY) / scale;
-      const delta = -e.deltaY * 0.001;
-      const newScale = Math.max(0.2, Math.min(3, scale + delta));
+      const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top;
+      const mouseBeforeZoomX = (mouseX - panX) / scale, mouseBeforeZoomY = (mouseY - panY) / scale;
+      const newScale = Math.max(0.2, Math.min(3, scale - e.deltaY * 0.001));
       panX = mouseX - mouseBeforeZoomX * newScale;
       panY = mouseY - mouseBeforeZoomY * newScale;
       scale = newScale;
@@ -329,22 +293,14 @@
     });
 
     viewport.addEventListener('mousedown', (e) => {
-        if (e.target !== viewport && e.target !== canvas) return;
-        if (e.button !== 0) return;
+        if (e.target !== viewport && e.target !== canvas || e.button !== 0) return;
         isPanning = true;
         startPanX = e.clientX - panX;
         startPanY = e.clientY - panY;
         viewport.style.cursor = 'grabbing';
     });
-    
     window.addEventListener('mouseup', () => { isPanning = false; viewport.style.cursor = 'grab'; });
-    window.addEventListener('mousemove', (e) => {
-        if (isPanning) {
-            panX = e.clientX - startPanX;
-            panY = e.clientY - startPanY;
-            applyTransform();
-        }
-    });
+    window.addEventListener('mousemove', (e) => { if (isPanning) { panX = e.clientX - startPanX; panY = e.clientY - startPanY; applyTransform(); } });
 
     editor.addEventListener('keydown', (e) => {
       if (e.key === 'Tab') {
@@ -363,9 +319,7 @@
         a.click();
         URL.revokeObjectURL(a.href);
     });
-
     btnImport.addEventListener('click', () => fileInput.click());
-
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -404,16 +358,13 @@
       const rowGap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--row-gap'));
       const positions = new Map();
       const levelHeights = new Map();
-
       function calculateY(node, currentY) {
           const nodeHeight = 20 + Math.ceil(node.text.length / 25) * 24 + 10;
           let y = currentY;
           if (levelHeights.has(node.level) && levelHeights.get(node.level) > y) y = levelHeights.get(node.level);
           positions.set(node.id, { x: node.level * colWidth, y, w: 220, h: nodeHeight });
-          
           let childY = y;
           const visibleChildren = node.children.filter(c => c.isVisible);
-          
           if (visibleChildren.length > 1) {
             const childrenHeight = visibleChildren.reduce((acc, child) => acc + (20 + Math.ceil(child.text.length / 25) * 24 + 10) + rowGap, 0) - rowGap;
             const parentPos = positions.get(node.id);
@@ -425,71 +376,82 @@
           levelHeights.set(node.level, newY);
           return newY;
       }
-      
       let currentY = 0;
       for(const child of root.children.filter(c => c.isVisible)) currentY = calculateY(child, currentY);
       let maxX = 0, maxY = 0;
-      positions.forEach(p => { 
-        maxX = Math.max(maxX, p.x + p.w); 
-        maxY = Math.max(maxY, p.y + p.h); 
-      });
+      positions.forEach(p => { maxX = Math.max(maxX, p.x + p.w); maxY = Math.max(maxY, p.y + p.h); });
       return { positions, width: maxX + colWidth, height: maxY + rowGap * 2 };
     }
     
     function draw(root, layout){
       const { positions, width, height } = layout;
-      canvas.style.width = width + 'px';
-      canvas.style.height = height + 'px';
-      wires.setAttribute('width', width);
-      wires.setAttribute('height', height);
+      canvas.style.width = `${width}px`; canvas.style.height = `${height}px`;
+      wires.setAttribute('width', width); wires.setAttribute('height', height);
       wires.setAttribute('viewBox', `0 0 ${width} ${height}`);
       wires.innerHTML = '';
       const fragment = document.createDocumentFragment();
       [...canvas.querySelectorAll('.node')].forEach(n => n.remove());
 
-      function render(node, parent, branchIndex){
+      // === LOGIC VẼ VÀ TÍNH MÀU ĐÃ ĐƯỢC VIẾT LẠI HOÀN TOÀN ===
+      function render(node, parent, branchIndex, baseBranchColor) {
         if (node.id === 'root') {
-             node.children.forEach((child, index) => render(child, node, index));
+             node.children.forEach((child, index) => render(child, node, index, null));
              return;
         }
         if (!node.isVisible) return;
+        
+        let currentBaseColor = baseBranchColor;
+        // Nếu là nhánh chính (cấp 1), xác định màu gốc cho toàn bộ nhánh
+        if (node.level === 1) {
+            currentBaseColor = BRANCH_COLOR_MAP.get(node.text) || FALLBACK_BRANCH_PALETTE[branchIndex % FALLBACK_BRANCH_PALETTE.length];
+        }
+
+        let finalNodeColor = currentBaseColor;
+        // Nếu là nhánh con (cấp > 1), làm đậm màu gốc
+        if (node.level > 1) {
+            const baseHsl = hexToHsl(currentBaseColor);
+            if(baseHsl) {
+                let newLightness = baseHsl.l * 100 - (node.level - 1) * 8;
+                newLightness = Math.max(30, newLightness);
+                finalNodeColor = `hsl(${baseHsl.h}, ${baseHsl.s * 100}%, ${newLightness}%)`;
+            }
+        }
+        
+        // Xử lý nút gốc (tiêu đề)
+        if (node.level === 0) {
+            finalNodeColor = rootNodeColor;
+        }
 
         const p = positions.get(node.id);
         const el = document.createElement('div');
         el.className = 'node';
-        el.style.left = p.x + 'px';
-        el.style.top = p.y + 'px';
-        el.style.height = p.h + 'px';
-        el.style.background = getNodeColor(node.level, branchIndex);
+        el.style.left = `${p.x}px`; el.style.top = `${p.y}px`; el.style.height = `${p.h}px`;
+        el.style.background = finalNodeColor;
         el.textContent = node.text;
         
         if (node.level === 0) {
-            el.style.fontSize = '18px';
-            el.style.fontWeight = '900';
-            el.style.color = '#101010';
+            el.style.fontSize = '18px'; el.style.fontWeight = '900'; el.style.color = '#101010';
         }
-
         if (presentationMode && node.children.some(c => !c.isVisible)) {
             el.classList.add('presentation-clickable');
             el.onclick = () => { node.children.forEach(c => c.isVisible = true); triggerUpdate(false); };
         }
         fragment.appendChild(el);
         if (parent && parent.id !== 'root' && parent.isVisible){
-          const a = positions.get(parent.id);
-          const p_pos = positions.get(node.id);
+          const a = positions.get(parent.id), p_pos = positions.get(node.id);
           const [x1, y1, x2, y2] = [a.x + a.w, a.y + a.h / 2, p_pos.x, p_pos.y + p_pos.h / 2];
           const dx = Math.max(40, (x2 - x1) / 2);
           const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
           path.setAttribute('d', `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`);
-          path.setAttribute('fill', 'none');
-          path.setAttribute('stroke', 'rgba(148,163,184,.6)');
-          path.setAttribute('stroke-width', '2');
-          path.setAttribute('stroke-linecap', 'round');
+          path.setAttribute('fill', 'none'); path.setAttribute('stroke', 'rgba(148,163,184,.6)');
+          path.setAttribute('stroke-width', '2'); path.setAttribute('stroke-linecap', 'round');
           wires.appendChild(path);
         }
-        node.children.forEach(child => render(child, node, branchIndex));
+        
+        // Truyền màu gốc xuống cho các nút con
+        node.children.forEach(child => render(child, node, branchIndex, currentBaseColor));
       }
-      render(root, null, 0);
+      render(root, null, 0, null);
       canvas.insertBefore(fragment, wires);
     }
 
