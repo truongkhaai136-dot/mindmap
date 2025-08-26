@@ -129,7 +129,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      flex-wrap: wrap; /* Cho phép các nút xuống dòng nếu không đủ không gian */
+      flex-wrap: wrap;
     }
 
     .btn {
@@ -407,30 +407,29 @@
       return { positions, width: maxX + colWidth, height: maxY + rowGap * 2 };
     }
     
-    // Bảng màu Pastel/Nhạt
-    const BASE_HUES = [190, 340, 45, 270, 140, 75];
-
     // === HÀM ĐÃ THAY ĐỔI ===
     function hslForLevel(level, branchIndex){
+      // Tông màu được chọn để có sự khác biệt rõ rệt
+      const BASE_HUES = [210, 150, 25, 310, 55, 250]; // Xanh da trời, Xanh bạc hà, Cam, Hồng, Vàng, Tím
       const hue = BASE_HUES[branchIndex % BASE_HUES.length];
-      let sat = 90;
+      let sat;
       let light;
 
       if (level === 0) { // Nút gốc
-        light = 92; // Rất nhạt
-        sat = 85;
+        light = 94; // Rất nhạt, gần như trắng
+        sat = 80;
       } else if (level === 1) { // Các nhánh chính
-        light = 82; // Nhạt và sáng
+        sat = 85; // Bão hòa vừa phải để màu dịu mắt
+        light = 80; // Giảm độ sáng một chút để màu rõ hơn
       } else { // Các nhánh con (cấp 2 trở đi)
-        // Bắt đầu từ độ sáng của nhánh chính (82) và làm nó tối đi
-        light = 82 - (level - 1) * 15;
-        // Đảm bảo không quá tối
-        light = Math.max(50, light);
+        sat = 88; // Tăng độ bão hòa để màu đậm nét
+        // Bắt đầu từ độ sáng của nhánh chính (80) và làm nó tối đi
+        light = 80 - (level - 1) * 18;
+        light = Math.max(45, light); // Đảm bảo không quá tối
       }
       return `hsl(${hue} ${sat}% ${light}%)`;
     }
     
-    // === HÀM ĐÃ THAY ĐỔI ===
     function draw(root, layout){
       const { positions, width, height } = layout;
       canvas.style.width = width + 'px';
@@ -459,13 +458,11 @@
         el.style.background = hslForLevel(node.level, branchIndex);
         el.textContent = node.text;
         
-        // === PHẦN MỚI: TÙY CHỈNH NÚT GỐC ===
         if (node.level === 0) {
             el.style.fontSize = '17px';
             el.style.fontWeight = '800';
-            el.style.color = '#050a14'; // Màu chữ tối hơn để dễ đọc trên nền sáng
+            el.style.color = '#050a14';
         }
-        // === KẾT THÚC PHẦN MỚI ===
 
         if (presentationMode && node.children.some(c => !c.isVisible)) {
             el.classList.add('presentation-clickable');
