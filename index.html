@@ -192,7 +192,39 @@
     }
     // --- END: COLOR LOGIC ---
     
-    panelToggleBtn.addEventListener('click', () => appContainer.classList.toggle('panel-closed'));
+    // --- START: SỬA LỖI BIẾN DẠNG KHI THU GỌN PANEL ---
+    panelToggleBtn.addEventListener('click', () => {
+        // Đọc chiều rộng của panel trái từ biến CSS
+        const leftPanelWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--left-panel-width'));
+        // Kiểm tra xem panel đang đóng hay mở để quyết định hành động
+        const isOpening = appContainer.classList.contains('panel-closed');
+
+        // Tạm thời thêm hiệu ứng chuyển động (transition) cho canvas để pan mượt mà
+        canvas.style.transition = 'transform 0.4s ease';
+
+        // Điều chỉnh giá trị panX để bù lại cho chiều rộng của panel
+        if (isOpening) {
+            // Khi mở panel, viewport dịch sang phải, vì vậy ta pan nội dung sang trái (giảm panX)
+            // để giữ nội dung ở nguyên vị trí trên màn hình.
+            panX -= leftPanelWidth;
+        } else {
+            // Khi đóng panel, viewport dịch sang trái, vì vậy ta pan nội dung sang phải (tăng panX).
+            panX += leftPanelWidth;
+        }
+        
+        // Chuyển đổi class để điều khiển layout grid (ẩn/hiện panel)
+        appContainer.classList.toggle('panel-closed');
+        
+        // Áp dụng transform mới; transition sẽ làm cho nó chuyển động mượt mà
+        applyTransform();
+
+        // Xóa transition sau khi hiệu ứng kết thúc (400ms)
+        // để nó không ảnh hưởng đến việc pan và zoom thông thường bằng chuột.
+        setTimeout(() => {
+            canvas.style.transition = 'none';
+        }, 400);
+    });
+    // --- END: SỬA LỖI BIẾN DẠNG KHI THU GỌN PANEL ---
 
     btnPresent.addEventListener('click', () => {
         presentationMode = !presentationMode;
