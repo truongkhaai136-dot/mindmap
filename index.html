@@ -109,12 +109,12 @@
       box-shadow: 0 6px 18px rgba(0,0,0,.35);
       backdrop-filter: blur(4px);
       -webkit-backdrop-filter: blur(4px);
-      color: #0b1220;
+      color: #1c1c1c; /* Đổi màu chữ mặc định thành màu tối để dễ đọc trên nền sáng */
       font-weight: 600;
       line-height: 1.45;
       word-wrap: break-word;
       overflow-wrap: anywhere;
-      transition: transform .12s ease, opacity .3s ease;
+      transition: transform .12s ease, opacity .3s ease, background .3s ease;
     }
     .node:hover { transform: translateY(-1px) scale(1.01); }
     .node.presentation-clickable { cursor: pointer; }
@@ -198,6 +198,7 @@
   Học Ngữ Pháp
     Thì Hiện tại đơn
     Thì Quá khứ đơn
+      Chi tiết thì
   Học Từ Vựng
     Chủ đề Gia đình
     Chủ đề Công việc
@@ -216,6 +217,8 @@
   <button id="panel-toggle-btn">«</button>
 
   <script>
+    // === PHẦN SCRIPT ĐÃ ĐƯỢC CẬP NHẬT HOÀN TOÀN ===
+    
     const editor = document.getElementById('editor');
     const canvas = document.getElementById('canvas');
     const wires = document.getElementById('wires');
@@ -224,29 +227,78 @@
     const btnImport = document.getElementById('btnImport');
     const fileInput = document.getElementById('fileInput');
     const btnPresent = document.getElementById('btnPresent');
-
     const appContainer = document.getElementById('app-container');
     const panelToggleBtn = document.getElementById('panel-toggle-btn');
+
+    // === BẢNG MÀU MỚI DO BẠN CUNG CẤP ===
+    const ROOT_NODE_PALETTE = ['#d586f4', '#c3e9cc', '#f3a88f', '#a6abe7', '#eedc96', '#f6f3ce', '#aae496'];
+    const MAIN_BRANCH_PALETTE = ['#FAFAD2', '#B0E0E6', '#FFFACD', '#D8BFD8', '#FFDAB9', '#AAF0D1', '#EEDFCC', '#FFF5E1'];
 
     let scale = 1, panX = 40, panY = 40;
     let isPanning = false, startPanX = 0, startPanY = 0;
     let presentationMode = false;
     let mindmapTree = {};
+    let rootNodeColor = ROOT_NODE_PALETTE[0]; // Màu mặc định ban đầu
 
-    panelToggleBtn.addEventListener('click', () => {
-        appContainer.classList.toggle('panel-closed');
-    });
+    // === HÀM HỖ TRỢ CHUYỂN ĐỔI HEX SANG HSL ===
+    function hexToHsl(hex) {
+      if (!hex) return null;
+      let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      if (!result) return null;
+
+      let r = parseInt(result[1], 16) / 255;
+      let g = parseInt(result[2], 16) / 255;
+      let b = parseInt(result[3], 16) / 255;
+      
+      let max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h, s, l = (max + min) / 2;
+
+      if (max == min) {
+        h = s = 0; // Grayscale
+      } else {
+        let d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+          case g: h = (b - r) / d + 2; break;
+          case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+      }
+      return { h: h * 360, s: s, l: l };
+    }
+
+    // === HÀM LẤY MÀU MỚI, THAY THẾ CHO `hslForLevel` ===
+    function getNodeColor(level, branchIndex) {
+        if (level === 0) {
+            return rootNodeColor;
+        }
+
+        const baseHexColor = MAIN_BRANCH_PALETTE[branchIndex % MAIN_BRANCH_PALETTE.length];
+
+        if (level === 1) {
+            return baseHexColor;
+        }
+
+        const baseHsl = hexToHsl(baseHexColor);
+        if (!baseHsl) return '#CCCCCC'; // Màu dự phòng
+
+        // Giảm 8% độ sáng cho mỗi cấp độ sâu hơn
+        let newLightness = baseHsl.l * 100 - (level - 1) * 8;
+        newLightness = Math.max(30, newLightness); // Đảm bảo không quá tối
+
+        return `hsl(${baseHsl.h}, ${baseHsl.s * 100}%, ${newLightness}%)`;
+    }
+
+    panelToggleBtn.addEventListener('click', () => appContainer.classList.toggle('panel-closed'));
 
     btnPresent.addEventListener('click', () => {
         presentationMode = !presentationMode;
         btnPresent.classList.toggle('active', presentationMode);
         
         function setVisibility(node, level) {
-            if (presentationMode) {
-                node.isVisible = level <= 0;
-            } else {
-                node.isVisible = true;
-            }
+            if (presentationMode) node.isVisible = level <= 0;
+            else node.isVisible = true;
             node.children.forEach(child => setVisibility(child, level + 1));
         }
         setVisibility(mindmapTree, -1);
@@ -262,17 +314,13 @@
       const rect = viewport.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
-      
       const mouseBeforeZoomX = (mouseX - panX) / scale;
       const mouseBeforeZoomY = (mouseY - panY) / scale;
-      
       const delta = -e.deltaY * 0.001;
       const newScale = Math.max(0.2, Math.min(3, scale + delta));
-      
       panX = mouseX - mouseBeforeZoomX * newScale;
       panY = mouseY - mouseBeforeZoomY * newScale;
       scale = newScale;
-      
       applyTransform();
     });
 
@@ -284,12 +332,8 @@
         startPanY = e.clientY - panY;
         viewport.style.cursor = 'grabbing';
     });
-
-    window.addEventListener('mouseup', () => {
-        isPanning = false;
-        viewport.style.cursor = 'grab';
-    });
     
+    window.addEventListener('mouseup', () => { isPanning = false; viewport.style.cursor = 'grab'; });
     window.addEventListener('mousemove', (e) => {
         if (isPanning) {
             panX = e.clientX - startPanX;
@@ -301,37 +345,28 @@
     editor.addEventListener('keydown', (e) => {
       if (e.key === 'Tab') {
         e.preventDefault();
-        const start = editor.selectionStart;
-        const end = editor.selectionEnd;
-        const val = editor.value;
-        editor.value = val.substring(0, start) + '  ' + val.substring(end);
+        const start = editor.selectionStart, end = editor.selectionEnd;
+        editor.value = editor.value.substring(0, start) + '  ' + editor.value.substring(end);
         editor.selectionStart = editor.selectionEnd = start + 2;
         triggerUpdate();
       }
     });
 
     btnDownload.addEventListener('click', () => {
-        const text = editor.value;
-        const blob = new Blob([text], { type: 'text/plain' });
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
+        a.href = URL.createObjectURL(new Blob([editor.value], { type: 'text/plain' }));
         a.download = 'mindmap.txt';
         a.click();
         URL.revokeObjectURL(a.href);
     });
 
-    btnImport.addEventListener('click', () => {
-        fileInput.click();
-    });
+    btnImport.addEventListener('click', () => fileInput.click());
 
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = (event) => {
-            editor.value = event.target.result;
-            triggerUpdate();
-        };
+        reader.onload = (event) => { editor.value = event.target.result; triggerUpdate(); };
         reader.readAsText(file);
         fileInput.value = '';
     });
@@ -340,17 +375,15 @@
       return text.split(/\r?\n/)
         .map((raw, idx) => {
           const match = raw.match(/^(\s*)(.*)$/);
-          const indent = match ? match[1] : '';
-          const content = match ? match[2] : raw;
-          const spaces = indent.replace(/\t/g, '  ');
-          const level = Math.floor(spaces.length / 2);
-          return { id: idx, level, text: content.trim(), raw };
+          const level = Math.floor((match ? match[1] : '').replace(/\t/g, '  ').length / 2);
+          const content = (match ? match[2] : raw).trim();
+          return { id: idx, level, text: content };
         })
         .filter(n => n.text.length > 0);
     }
 
     function buildTree(nodes){
-      const root = { id: 'root', level: -1, text: 'ROOT', children: [], isVisible: true };
+      const root = { id: 'root', level: -1, children: [], isVisible: true };
       const stack = [root];
       nodes.forEach(n => {
         while (stack.length && stack[stack.length-1].level >= n.level) stack.pop();
@@ -371,11 +404,8 @@
       function calculateY(node, currentY) {
           const nodeHeight = 20 + Math.ceil(node.text.length / 25) * 24 + 10;
           let y = currentY;
-          if (levelHeights.has(node.level) && levelHeights.get(node.level) > y) {
-              y = levelHeights.get(node.level);
-          }
-          const x = node.level * colWidth;
-          positions.set(node.id, { x, y, w: 220, h: nodeHeight });
+          if (levelHeights.has(node.level) && levelHeights.get(node.level) > y) y = levelHeights.get(node.level);
+          positions.set(node.id, { x: node.level * colWidth, y, w: 220, h: nodeHeight });
           
           let childY = y;
           const visibleChildren = node.children.filter(c => c.isVisible);
@@ -386,48 +416,20 @@
             parentPos.y = y + childrenHeight / 2 - parentPos.h / 2;
             positions.set(node.id, parentPos);
           }
-          for (const child of visibleChildren) {
-              childY = calculateY(child, childY);
-          }
+          for (const child of visibleChildren) childY = calculateY(child, childY);
           const newY = childY > y ? childY : y + nodeHeight + rowGap;
           levelHeights.set(node.level, newY);
           return newY;
       }
       
       let currentY = 0;
-      const visibleRootChildren = root.children.filter(c => c.isVisible);
-      for(const child of visibleRootChildren){
-          currentY = calculateY(child, currentY);
-      }
+      for(const child of root.children.filter(c => c.isVisible)) currentY = calculateY(child, currentY);
       let maxX = 0, maxY = 0;
       positions.forEach(p => { 
         maxX = Math.max(maxX, p.x + p.w); 
         maxY = Math.max(maxY, p.y + p.h); 
       });
       return { positions, width: maxX + colWidth, height: maxY + rowGap * 2 };
-    }
-    
-    // === HÀM ĐÃ THAY ĐỔI ===
-    function hslForLevel(level, branchIndex){
-      // Tông màu được chọn để có sự khác biệt rõ rệt
-      const BASE_HUES = [210, 150, 25, 310, 55, 250]; // Xanh da trời, Xanh bạc hà, Cam, Hồng, Vàng, Tím
-      const hue = BASE_HUES[branchIndex % BASE_HUES.length];
-      let sat;
-      let light;
-
-      if (level === 0) { // Nút gốc
-        light = 94; // Rất nhạt, gần như trắng
-        sat = 80;
-      } else if (level === 1) { // Các nhánh chính
-        sat = 85; // Bão hòa vừa phải để màu dịu mắt
-        light = 80; // Giảm độ sáng một chút để màu rõ hơn
-      } else { // Các nhánh con (cấp 2 trở đi)
-        sat = 88; // Tăng độ bão hòa để màu đậm nét
-        // Bắt đầu từ độ sáng của nhánh chính (80) và làm nó tối đi
-        light = 80 - (level - 1) * 18;
-        light = Math.max(45, light); // Đảm bảo không quá tối
-      }
-      return `hsl(${hue} ${sat}% ${light}%)`;
     }
     
     function draw(root, layout){
@@ -446,7 +448,6 @@
              node.children.forEach((child, index) => render(child, node, index));
              return;
         }
-
         if (!node.isVisible) return;
 
         const p = positions.get(node.id);
@@ -455,31 +456,24 @@
         el.style.left = p.x + 'px';
         el.style.top = p.y + 'px';
         el.style.height = p.h + 'px';
-        el.style.background = hslForLevel(node.level, branchIndex);
+        el.style.background = getNodeColor(node.level, branchIndex); // <-- SỬ DỤNG HÀM MÀU MỚI
         el.textContent = node.text;
         
         if (node.level === 0) {
-            el.style.fontSize = '17px';
-            el.style.fontWeight = '800';
-            el.style.color = '#050a14';
+            el.style.fontSize = '18px';
+            el.style.fontWeight = '900';
+            el.style.color = '#101010';
         }
 
         if (presentationMode && node.children.some(c => !c.isVisible)) {
             el.classList.add('presentation-clickable');
-            el.onclick = () => {
-                node.children.forEach(child => child.isVisible = true);
-                triggerUpdate(false);
-            };
+            el.onclick = () => { node.children.forEach(c => c.isVisible = true); triggerUpdate(false); };
         }
-
         fragment.appendChild(el);
-        
         if (parent && parent.id !== 'root' && parent.isVisible){
           const a = positions.get(parent.id);
-          const x1 = a.x + a.w;
-          const y1 = a.y + a.h / 2;
-          const x2 = p.x;
-          const y2 = p.y + p.h / 2;
+          const p_pos = positions.get(node.id);
+          const [x1, y1, x2, y2] = [a.x + a.w, a.y + a.h / 2, p_pos.x, p_pos.y + p_pos.h / 2];
           const dx = Math.max(40, (x2 - x1) / 2);
           const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
           path.setAttribute('d', `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`);
@@ -502,6 +496,8 @@
         if (reparse) {
             const nodes = parseLines(editor.value);
             mindmapTree = buildTree(nodes);
+            // Chọn màu ngẫu nhiên cho nút gốc MỖI KHI CẬP NHẬT
+            rootNodeColor = ROOT_NODE_PALETTE[Math.floor(Math.random() * ROOT_NODE_PALETTE.length)];
         }
         const layout = layoutTree(mindmapTree);
         draw(mindmapTree, layout);
@@ -509,7 +505,6 @@
     }
 
     editor.addEventListener('input', () => triggerUpdate());
-
     applyTransform();
     triggerUpdate();
   </script>
