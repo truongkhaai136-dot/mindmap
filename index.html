@@ -36,22 +36,63 @@
     h1 { font-size: 18px; margin: 0 0 2px 0; font-weight: 650; letter-spacing: .2px; color: #f1f5f9; }
     .help { color: var(--muted); font-size: 12px; line-height: 1.5; }
     textarea { width: 100%; height: 100%; resize: none; padding: 14px 14px 18px 14px; border-radius: 16px; border: 1px solid #1f2a44; background: linear-gradient(180deg, #0c1425, #0b1220); color: var(--text); outline: none; box-shadow: var(--shadow); line-height: 1.6; caret-color: var(--accent); tab-size: 2; }
-    .right { position: relative; border-radius: 16px; background: linear-gradient(180deg, #0c1425, #0b1220); border: 1px solid #1f2a44; overflow: hidden; box-shadow: var(--shadow); cursor: grab; }
+    .right { 
+      position: relative; 
+      border-radius: 16px; 
+      background: linear-gradient(180deg, #0c1425, #0b1220); 
+      border: 1px solid #1f2a44; 
+      overflow: hidden; 
+      box-shadow: var(--shadow); 
+      cursor: grab; 
+      /* CSS cho hình nền */
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
     .right:active { cursor: grabbing; }
     .canvas { position: relative; min-width: 100%; min-height: 100%; transform-origin: 0 0; }
-    .node { position: absolute; width: var(--node-w); max-width: var(--node-w); padding: 10px 12px; border-radius: var(--radius); border: 1px solid rgba(255,255,255,.08); box-shadow: 0 6px 18px rgba(0,0,0,.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); color: var(--text-dark); font-weight: 600; line-height: 1.45; word-wrap: break-word; overflow-wrap: anywhere; transition: transform .12s ease, opacity .3s ease, background .3s ease; z-index: 10; }
+    .node { position: absolute; width: var(--node-w); max-width: var(--node-w); padding: 10px 12px; border-radius: var(--radius); border: 1px solid rgba(255,255,255,.08); box-shadow: 0 6px 18px rgba(0,0,0,.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); color: var(--text-dark); font-weight: 600; line-height: 1.45; word-wrap: break-word; overflow-wrap: anywhere; transition: transform .12s ease, opacity .3s ease, background .3s ease; }
     .node:hover { transform: translateY(-1px) scale(1.01); }
     .node.presentation-clickable { cursor: pointer; }
-    .svg-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5;}
+    .svg-layer { position: absolute; inset: 0; pointer-events: none; }
     .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .btn { background: #0a1222; color: var(--text); border: 1px solid #1f2a44; padding: 8px 10px; border-radius: 10px; font-size: 12px; cursor: pointer; }
     .btn:hover{ border-color:#2a3b63 }
     .btn.active { background-color: var(--accent); color: var(--bg); border-color: var(--accent); }
     #panel-toggle-btn { position: fixed; top: 20px; left: calc(var(--left-panel-width) + 4px); z-index: 100; width: 28px; height: 28px; background: #1f2937; color: var(--text); border: 1px solid #2a3b63; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: left 0.4s ease, transform 0.3s ease; }
     .app.panel-closed + #panel-toggle-btn { left: 10px; transform: scaleX(-1); }
-    .draggable-image-container { position: absolute; border: 2px dashed var(--accent); cursor: move; z-index: 1; width: 250px; height: auto; }
-    .draggable-image-container img { width: 100%; height: 100%; display: block; pointer-events: none; }
-    .resize-handle { position: absolute; bottom: -6px; right: -6px; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: se-resize; z-index: 2; border: 2px solid var(--bg); }
+    
+    /* CSS cho ảnh di động */
+    #image-container {
+      position: absolute;
+      display: none;
+      top: 100px;
+      left: 100px;
+      width: 200px;
+      height: auto;
+      cursor: move;
+      z-index: 10;
+      border: 2px dashed var(--accent);
+      border-radius: 8px;
+    }
+    #movable-image {
+      width: 100%;
+      height: 100%;
+      display: block;
+      pointer-events: none; /* Quan trọng để sự kiện chuột đi qua ảnh */
+    }
+    .resize-handle {
+      position: absolute;
+      width: 15px;
+      height: 15px;
+      background: var(--accent);
+      right: -7.5px;
+      bottom: -7.5px;
+      border-radius: 50%;
+      cursor: nwse-resize;
+      border: 2px solid var(--bg);
+    }
+
     @media (max-width: 1000px) { .app { grid-template-columns: 1fr; height: auto; } .right { height: 70vh; } #panel-toggle-btn { display: none; } }
   </style>
 </head>
@@ -63,14 +104,20 @@
         <button class="btn" id="btnDownload">Tải Mindmap</button>
         <button class="btn" id="btnImport">Nhập Mindmap</button>
         <button class="btn" id="btnPresent">Thuyết trình</button>
-        <button class="btn" id="btnSetBg">Đổi ảnh nền</button>
-        <button class="btn" id="btnAddImage">Chèn ảnh</button>
-        <button class="btn" id="btnRemoveBg" style="display:none;">Xóa nền</button>
+        <!-- Nút mới cho tính năng ảnh -->
+        <button class="btn" id="btnChangeBg">Đổi nền</button>
+        <button class="btn" id="btnAddImage">Thêm ảnh</button>
+        
+        <!-- Input ẩn cho tải file -->
+        <input type="file" id="fileInput" accept=".txt" style="display: none;">
+        <input type="file" id="bgInput" accept="image/*" style="display: none;">
+        <input type="file" id="imageInput" accept="image/*" style="display: none;">
       </div>
       <div class="help">
         • Mỗi <b>dòng</b> là một nút. Số <b>dấu cách đầu dòng</b> = cấp độ.<br/>
         • Gõ / xóa: sơ đồ <b>cập nhật ngay</b>. Dùng <kbd>Tab</kbd> để thụt đầu dòng.<br/>
         • Lăn chuột để <b>phóng to/thu nhỏ</b>, kéo chuột để <b>di chuyển</b>.<br/>
+        • Với ảnh thêm vào: Lăn chuột để <b>phóng to/nhỏ</b>, kéo góc để <b>đổi cỡ</b>.
       </div>
       <textarea id="editor" spellcheck="false">Học Tiếng Anh
   Học Ngữ Pháp
@@ -85,15 +132,17 @@
     Phụ âm</textarea>
     </div>
     <div class="right" id="viewport">
+      <!-- Container cho ảnh di động -->
+      <div id="image-container">
+        <img id="movable-image" src="">
+        <div class="resize-handle"></div>
+      </div>
       <div class="canvas" id="canvas">
         <svg class="svg-layer" id="wires"></svg>
       </div>
     </div>
   </div>
   <button id="panel-toggle-btn">«</button>
-  <input type="file" id="bgFileInput" accept="image/*" style="display: none;">
-  <input type="file" id="imageFileInput" accept="image/*" style="display: none;">
-
   <script>
     const editor = document.getElementById('editor');
     const canvas = document.getElementById('canvas');
@@ -105,19 +154,23 @@
     const btnPresent = document.getElementById('btnPresent');
     const appContainer = document.getElementById('app-container');
     const panelToggleBtn = document.getElementById('panel-toggle-btn');
-    
-    const btnSetBg = document.getElementById('btnSetBg');
+
+    // --- START: Biến và DOM elements cho tính năng ảnh ---
+    const btnChangeBg = document.getElementById('btnChangeBg');
+    const bgInput = document.getElementById('bgInput');
     const btnAddImage = document.getElementById('btnAddImage');
-    const btnRemoveBg = document.getElementById('btnRemoveBg');
-    const bgFileInput = document.getElementById('bgFileInput');
-    const imageFileInput = document.getElementById('imageFileInput');
-    const originalViewportBg = viewport.style.background;
+    const imageInput = document.getElementById('imageInput');
+    const imageContainer = document.getElementById('image-container');
+    const movableImage = document.getElementById('movable-image');
+    const resizeHandle = document.querySelector('.resize-handle');
+    // --- END: Biến và DOM elements cho tính năng ảnh ---
 
     let scale = 1, panX = 40, panY = 40;
     let isPanning = false, startPanX = 0, startPanY = 0;
     let presentationMode = false;
     let mindmapTree = {};
 
+    // --- START: COLOR LOGIC ---
     const ROOT_NODE_PALETTE = ['#d586f4','#c3e9cc','#f3a88f','#a6abe7','#eedc96','#f6f3ce','#aae496'];
     const MAIN_BRANCH_COLORS = ['#B0E0E6','#FFFACD','#D8BFD8','#FFDAB9','#AAF0D1','#EEDFCC','#FFF5E1'];
     let rootNodeColor = ROOT_NODE_PALETTE[Math.floor(Math.random()*ROOT_NODE_PALETTE.length)];
@@ -137,119 +190,8 @@
       }
       return { h: h * 360, s: s, l: l };
     }
+    // --- END: COLOR LOGIC ---
     
-    // --- START: IMAGE FEATURE LOGIC ---
-    btnSetBg.addEventListener('click', () => bgFileInput.click());
-    btnAddImage.addEventListener('click', () => imageFileInput.click());
-
-    bgFileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            viewport.style.background = `url(${event.target.result})`;
-            viewport.style.backgroundSize = 'cover';
-            viewport.style.backgroundPosition = 'center';
-            btnRemoveBg.style.display = 'inline-block';
-        };
-        reader.readAsDataURL(file);
-        bgFileInput.value = '';
-    });
-
-    btnRemoveBg.addEventListener('click', () => {
-        viewport.style.background = originalViewportBg;
-        btnRemoveBg.style.display = 'none';
-    });
-    
-    imageFileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const container = document.createElement('div');
-            container.className = 'draggable-image-container';
-            
-            const img = document.createElement('img');
-            img.src = event.target.result;
-            
-            const handle = document.createElement('div');
-            handle.className = 'resize-handle';
-            
-            container.appendChild(img);
-            container.appendChild(handle);
-            canvas.appendChild(container); 
-            
-            const canvasRect = canvas.getBoundingClientRect();
-            const initialLeft = (viewport.offsetWidth / 2 - panX) / scale - 125;
-            const initialTop = (viewport.offsetHeight / 2 - panY) / scale - 100;
-
-            container.style.left = `${initialLeft}px`;
-            container.style.top = `${initialTop}px`;
-
-            makeImageInteractive(container, handle);
-        };
-        reader.readAsDataURL(file);
-        imageFileInput.value = '';
-    });
-
-    function makeImageInteractive(container, handle) {
-        let isDragging = false, isResizing = false;
-        let startX, startY, startLeft, startTop, startWidth;
-
-        container.addEventListener('mousedown', (e) => {
-            if (e.target !== container) return;
-            e.preventDefault();
-            isDragging = true;
-            
-            startX = e.clientX;
-            startY = e.clientY;
-            startLeft = container.offsetLeft;
-            startTop = container.offsetTop;
-
-            window.addEventListener('mousemove', onMouseMoveDrag);
-            window.addEventListener('mouseup', onMouseUpDrag);
-        });
-
-        function onMouseMoveDrag(e) {
-            if (!isDragging) return;
-            const dx = (e.clientX - startX) / scale;
-            const dy = (e.clientY - startY) / scale;
-            container.style.left = `${startLeft + dx}px`;
-            container.style.top = `${startTop + dy}px`;
-        }
-
-        function onMouseUpDrag() {
-            isDragging = false;
-            window.removeEventListener('mousemove', onMouseMoveDrag);
-            window.removeEventListener('mouseup', onMouseUpDrag);
-        }
-
-        handle.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            isResizing = true;
-            
-            startX = e.clientX;
-            startWidth = container.offsetWidth;
-
-            window.addEventListener('mousemove', onMouseMoveResize);
-            window.addEventListener('mouseup', onMouseUpResize);
-        });
-
-        function onMouseMoveResize(e) {
-            if (!isResizing) return;
-            const dx = (e.clientX - startX) / scale;
-            container.style.width = `${startWidth + dx}px`;
-        }
-        
-        function onMouseUpResize() {
-            isResizing = false;
-            window.removeEventListener('mousemove', onMouseMoveResize);
-            window.removeEventListener('mouseup', onMouseUpResize);
-        }
-    }
-    // --- END: IMAGE FEATURE LOGIC ---
-
     panelToggleBtn.addEventListener('click', () => appContainer.classList.toggle('panel-closed'));
 
     btnPresent.addEventListener('click', () => {
@@ -266,6 +208,8 @@
     function applyTransform() { canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; }
 
     viewport.addEventListener('wheel', (e) => {
+      // Ngăn phóng to/thu nhỏ canvas nếu đang cuộn trên ảnh di động
+      if (e.target.closest('#image-container')) return;
       e.preventDefault();
       const rect = viewport.getBoundingClientRect();
       const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top;
@@ -278,8 +222,8 @@
     });
 
     viewport.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.draggable-image-container')) return;
-        if (e.target !== viewport && e.target !== canvas || e.button !== 0) return;
+        // Ngăn di chuyển canvas nếu đang tương tác với ảnh di động
+        if (e.target.closest('#image-container') || e.button !== 0) return;
         isPanning = true;
         startPanX = e.clientX - panX;
         startPanY = e.clientY - panY;
@@ -318,6 +262,102 @@
         reader.readAsText(file);
         fileInput.value = '';
     });
+
+    // --- START: LOGIC CHO TÍNH NĂNG ẢNH ---
+
+    // 1. Đổi hình nền
+    btnChangeBg.addEventListener('click', () => bgInput.click());
+    bgInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            viewport.style.backgroundImage = `url('${event.target.result}')`;
+        };
+        reader.readAsDataURL(file);
+        bgInput.value = '';
+    });
+
+    // 2. Thêm ảnh di động
+    btnAddImage.addEventListener('click', () => imageInput.click());
+    imageInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            movableImage.src = event.target.result;
+            imageContainer.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+        imageInput.value = '';
+    });
+
+    // 3. Logic di chuyển, thay đổi kích thước, phóng to/thu nhỏ ảnh
+    let isDragging = false, isResizing = false;
+    let imgOffsetX, imgOffsetY;
+    
+    imageContainer.addEventListener('mousedown', (e) => {
+        // Chỉ bắt đầu kéo nếu click vào container, không phải handle resize
+        if (e.target === resizeHandle) return;
+        e.stopPropagation(); // Ngăn canvas di chuyển
+        isDragging = true;
+        imgOffsetX = e.clientX - imageContainer.offsetLeft;
+        imgOffsetY = e.clientY - imageContainer.offsetTop;
+    });
+
+    resizeHandle.addEventListener('mousedown', (e) => {
+        e.stopPropagation(); // Ngăn canvas di chuyển
+        isResizing = true;
+        // Lưu vị trí chuột và kích thước ban đầu
+        imgOffsetX = e.clientX;
+        imgOffsetY = e.clientY;
+        const initialWidth = imageContainer.offsetWidth;
+        const initialHeight = imageContainer.offsetHeight;
+
+        window.addEventListener('mousemove', resizeImage);
+        window.addEventListener('mouseup', stopResize);
+
+        function resizeImage(event) {
+            if (isResizing) {
+                const dx = event.clientX - imgOffsetX;
+                const dy = event.clientY - imgOffsetY;
+                imageContainer.style.width = `${initialWidth + dx}px`;
+                imageContainer.style.height = `${initialHeight + dy}px`;
+            }
+        }
+
+        function stopResize() {
+            isResizing = false;
+            window.removeEventListener('mousemove', resizeImage);
+            window.removeEventListener('mouseup', stopResize);
+        }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+            imageContainer.style.left = `${e.clientX - imgOffsetX}px`;
+            imageContainer.style.top = `${e.clientY - imgOffsetY}px`;
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
+
+    // Phóng to/thu nhỏ ảnh bằng lăn chuột
+    imageContainer.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const currentWidth = imageContainer.offsetWidth;
+        const scaleFactor = e.deltaY < 0 ? 1.1 : 0.9; // Phóng to nếu cuộn lên, thu nhỏ nếu cuộn xuống
+        imageContainer.style.width = `${currentWidth * scaleFactor}px`;
+        // Giữ tỷ lệ khung hình
+        imageContainer.style.height = 'auto'; 
+    });
+
+
+    // --- END: LOGIC CHO TÍNH NĂNG ẢNH ---
+
 
     function parseLines(text){
       return text.split(/\r?\n/).map((raw, idx) => {
@@ -383,7 +423,6 @@
       wires.setAttribute('width', width); wires.setAttribute('height', height); wires.setAttribute('viewBox', `0 0 ${width} ${height}`);
       wires.innerHTML='';
       const fragment=document.createDocumentFragment();
-      // Chỉ xóa các node cũ, không xóa ảnh
       [...canvas.querySelectorAll('.node')].forEach(n=>n.remove());
 
       function render(node, parent, branchIndex, baseBranchColor){
@@ -449,8 +488,6 @@
     }
 
     let raf;
-    // --- START: SỬA LỖI TẠI ĐÂY ---
-    // Đã xóa logic thừa và sai trong hàm này
     function triggerUpdate(reparse = true){
       if (raf) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
@@ -458,7 +495,6 @@
         draw(mindmapTree, layoutTree(mindmapTree));
       });
     }
-    // --- END: SỬA LỖI TẠI ĐÂY ---
 
     editor.addEventListener('input', () => triggerUpdate());
     applyTransform();
