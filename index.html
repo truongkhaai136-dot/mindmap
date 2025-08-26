@@ -39,16 +39,19 @@
     .right { position: relative; border-radius: 16px; background: linear-gradient(180deg, #0c1425, #0b1220); border: 1px solid #1f2a44; overflow: hidden; box-shadow: var(--shadow); cursor: grab; }
     .right:active { cursor: grabbing; }
     .canvas { position: relative; min-width: 100%; min-height: 100%; transform-origin: 0 0; }
-    .node { position: absolute; width: var(--node-w); max-width: var(--node-w); padding: 10px 12px; border-radius: var(--radius); border: 1px solid rgba(255,255,255,.08); box-shadow: 0 6px 18px rgba(0,0,0,.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); color: var(--text-dark); font-weight: 600; line-height: 1.45; word-wrap: break-word; overflow-wrap: anywhere; transition: transform .12s ease, opacity .3s ease, background .3s ease; }
+    .node { position: absolute; width: var(--node-w); max-width: var(--node-w); padding: 10px 12px; border-radius: var(--radius); border: 1px solid rgba(255,255,255,.08); box-shadow: 0 6px 18px rgba(0,0,0,.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); color: var(--text-dark); font-weight: 600; line-height: 1.45; word-wrap: break-word; overflow-wrap: anywhere; transition: transform .12s ease, opacity .3s ease, background .3s ease; z-index: 10; }
     .node:hover { transform: translateY(-1px) scale(1.01); }
     .node.presentation-clickable { cursor: pointer; }
-    .svg-layer { position: absolute; inset: 0; pointer-events: none; }
+    .svg-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5;}
     .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .btn { background: #0a1222; color: var(--text); border: 1px solid #1f2a44; padding: 8px 10px; border-radius: 10px; font-size: 12px; cursor: pointer; }
     .btn:hover{ border-color:#2a3b63 }
     .btn.active { background-color: var(--accent); color: var(--bg); border-color: var(--accent); }
     #panel-toggle-btn { position: fixed; top: 20px; left: calc(var(--left-panel-width) + 4px); z-index: 100; width: 28px; height: 28px; background: #1f2937; color: var(--text); border: 1px solid #2a3b63; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: left 0.4s ease, transform 0.3s ease; }
     .app.panel-closed + #panel-toggle-btn { left: 10px; transform: scaleX(-1); }
+    .draggable-image-container { position: absolute; border: 2px dashed var(--accent); cursor: move; z-index: 1; width: 250px; height: auto; }
+    .draggable-image-container img { width: 100%; height: 100%; display: block; pointer-events: none; }
+    .resize-handle { position: absolute; bottom: -6px; right: -6px; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: se-resize; z-index: 2; border: 2px solid var(--bg); }
     @media (max-width: 1000px) { .app { grid-template-columns: 1fr; height: auto; } .right { height: 70vh; } #panel-toggle-btn { display: none; } }
   </style>
 </head>
@@ -60,7 +63,9 @@
         <button class="btn" id="btnDownload">Tải Mindmap</button>
         <button class="btn" id="btnImport">Nhập Mindmap</button>
         <button class="btn" id="btnPresent">Thuyết trình</button>
-        <input type="file" id="fileInput" accept=".txt" style="display: none;">
+        <button class="btn" id="btnSetBg">Đổi ảnh nền</button>
+        <button class="btn" id="btnAddImage">Chèn ảnh</button>
+        <button class="btn" id="btnRemoveBg" style="display:none;">Xóa nền</button>
       </div>
       <div class="help">
         • Mỗi <b>dòng</b> là một nút. Số <b>dấu cách đầu dòng</b> = cấp độ.<br/>
@@ -86,6 +91,9 @@
     </div>
   </div>
   <button id="panel-toggle-btn">«</button>
+  <input type="file" id="bgFileInput" accept="image/*" style="display: none;">
+  <input type="file" id="imageFileInput" accept="image/*" style="display: none;">
+
   <script>
     const editor = document.getElementById('editor');
     const canvas = document.getElementById('canvas');
@@ -97,13 +105,21 @@
     const btnPresent = document.getElementById('btnPresent');
     const appContainer = document.getElementById('app-container');
     const panelToggleBtn = document.getElementById('panel-toggle-btn');
+    
+    // --- START: IMAGE FEATURE ELEMENTS ---
+    const btnSetBg = document.getElementById('btnSetBg');
+    const btnAddImage = document.getElementById('btnAddImage');
+    const btnRemoveBg = document.getElementById('btnRemoveBg');
+    const bgFileInput = document.getElementById('bgFileInput');
+    const imageFileInput = document.getElementById('imageFileInput');
+    const originalViewportBg = viewport.style.background;
+    // --- END: IMAGE FEATURE ELEMENTS ---
 
     let scale = 1, panX = 40, panY = 40;
     let isPanning = false, startPanX = 0, startPanY = 0;
     let presentationMode = false;
     let mindmapTree = {};
 
-    // --- START: COLOR LOGIC ---
     const ROOT_NODE_PALETTE = ['#d586f4','#c3e9cc','#f3a88f','#a6abe7','#eedc96','#f6f3ce','#aae496'];
     const MAIN_BRANCH_COLORS = ['#B0E0E6','#FFFACD','#D8BFD8','#FFDAB9','#AAF0D1','#EEDFCC','#FFF5E1'];
     let rootNodeColor = ROOT_NODE_PALETTE[Math.floor(Math.random()*ROOT_NODE_PALETTE.length)];
@@ -123,8 +139,121 @@
       }
       return { h: h * 360, s: s, l: l };
     }
-    // --- END: COLOR LOGIC ---
     
+    // --- START: IMAGE FEATURE LOGIC ---
+    btnSetBg.addEventListener('click', () => bgFileInput.click());
+    btnAddImage.addEventListener('click', () => imageFileInput.click());
+
+    bgFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            viewport.style.background = `url(${event.target.result})`;
+            viewport.style.backgroundSize = 'cover';
+            viewport.style.backgroundPosition = 'center';
+            btnRemoveBg.style.display = 'inline-block';
+        };
+        reader.readAsDataURL(file);
+        bgFileInput.value = '';
+    });
+
+    btnRemoveBg.addEventListener('click', () => {
+        viewport.style.background = originalViewportBg;
+        btnRemoveBg.style.display = 'none';
+    });
+    
+    imageFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const container = document.createElement('div');
+            container.className = 'draggable-image-container';
+            
+            const img = document.createElement('img');
+            img.src = event.target.result;
+            
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+            
+            container.appendChild(img);
+            container.appendChild(handle);
+            canvas.prepend(container); // prepend để ảnh nằm dưới các node
+            
+            // Căn giữa ảnh mới chèn
+            const canvasRect = canvas.getBoundingClientRect();
+            container.style.left = `${(canvasRect.width / 2) / scale - 125}px`;
+            container.style.top = `${(canvasRect.height / 2) / scale - 100}px`;
+
+            makeImageInteractive(container, handle);
+        };
+        reader.readAsDataURL(file);
+        imageFileInput.value = '';
+    });
+
+    function makeImageInteractive(container, handle) {
+        let isDragging = false, isResizing = false;
+        let startX, startY, startLeft, startTop, startWidth, startHeight;
+
+        // Di chuyển ảnh
+        container.addEventListener('mousedown', (e) => {
+            if (e.target !== container) return; // Chỉ kéo khi bấm vào container, không phải handle
+            e.preventDefault();
+            isDragging = true;
+            
+            startX = e.clientX;
+            startY = e.clientY;
+            startLeft = container.offsetLeft;
+            startTop = container.offsetTop;
+
+            window.addEventListener('mousemove', onMouseMoveDrag);
+            window.addEventListener('mouseup', onMouseUpDrag);
+        });
+
+        function onMouseMoveDrag(e) {
+            if (!isDragging) return;
+            const dx = (e.clientX - startX) / scale;
+            const dy = (e.clientY - startY) / scale;
+            container.style.left = `${startLeft + dx}px`;
+            container.style.top = `${startTop + dy}px`;
+        }
+
+        function onMouseUpDrag() {
+            isDragging = false;
+            window.removeEventListener('mousemove', onMouseMoveDrag);
+            window.removeEventListener('mouseup', onMouseUpDrag);
+        }
+
+        // Thay đổi kích thước
+        handle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            isResizing = true;
+            
+            startX = e.clientX;
+            startY = e.clientY;
+            startWidth = container.offsetWidth;
+            startHeight = container.offsetHeight;
+
+            window.addEventListener('mousemove', onMouseMoveResize);
+            window.addEventListener('mouseup', onMouseUpResize);
+        });
+
+        function onMouseMoveResize(e) {
+            if (!isResizing) return;
+            const dx = (e.clientX - startX) / scale;
+            container.style.width = `${startWidth + dx}px`;
+        }
+        
+        function onMouseUpResize() {
+            isResizing = false;
+            window.removeEventListener('mousemove', onMouseMoveResize);
+            window.removeEventListener('mouseup', onMouseUpResize);
+        }
+    }
+    // --- END: IMAGE FEATURE LOGIC ---
+
     panelToggleBtn.addEventListener('click', () => appContainer.classList.toggle('panel-closed'));
 
     btnPresent.addEventListener('click', () => {
@@ -153,6 +282,8 @@
     });
 
     viewport.addEventListener('mousedown', (e) => {
+        // Ngăn kéo map khi đang tương tác với ảnh
+        if (e.target.closest('.draggable-image-container')) return;
         if (e.target !== viewport && e.target !== canvas || e.button !== 0) return;
         isPanning = true;
         startPanX = e.clientX - panX;
@@ -315,10 +446,7 @@
             wires.appendChild(path);
         }
         
-        // --- START: SỬA LỖI TẠI ĐÂY ---
-        // Truyền `index` của nút con thay vì `branchIndex` của nút cha
         node.children.forEach((child, index) => render(child, node, index, currentBaseColor));
-        // --- END: SỬA LỖI TẠI ĐÂY ---
       }
       render(root, null, 0, null);
       canvas.insertBefore(fragment, wires);
@@ -329,7 +457,11 @@
       if (raf) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         if (reparse) { mindmapTree = buildTree(parseLines(editor.value)); }
+        // Lưu lại các ảnh đang có trên canvas
+        const images = [...canvas.querySelectorAll('.draggable-image-container')];
         draw(mindmapTree, layoutTree(mindmapTree));
+        // Thêm lại các ảnh vào canvas sau khi vẽ lại mindmap
+        images.forEach(img => canvas.prepend(img));
       });
     }
 
