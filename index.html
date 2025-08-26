@@ -241,17 +241,16 @@
         presentationMode = !presentationMode;
         btnPresent.classList.toggle('active', presentationMode);
         
-        // Reset visibility when toggling presentation mode
         function setVisibility(node, level) {
             if (presentationMode) {
-                node.isVisible = level <= 0; // Only root's children are visible initially
+                node.isVisible = level <= 0;
             } else {
-                node.isVisible = true; // All nodes visible when not in presentation mode
+                node.isVisible = true;
             }
             node.children.forEach(child => setVisibility(child, level + 1));
         }
         setVisibility(mindmapTree, -1);
-        triggerUpdate(false); // Trigger update without re-parsing
+        triggerUpdate(false);
     });
 
     function applyTransform() {
@@ -408,15 +407,30 @@
       return { positions, width: maxX + colWidth, height: maxY + rowGap * 2 };
     }
     
-    const BASE_HUES = [210, 160, 40, 300, 260, 70];
+    // Bảng màu Pastel/Nhạt
+    const BASE_HUES = [190, 340, 45, 270, 140, 75];
 
+    // === HÀM ĐÃ THAY ĐỔI ===
     function hslForLevel(level, branchIndex){
       const hue = BASE_HUES[branchIndex % BASE_HUES.length];
-      const sat = 85;
-      const light = Math.max(40, 95 - level * 12);
+      let sat = 90;
+      let light;
+
+      if (level === 0) { // Nút gốc
+        light = 92; // Rất nhạt
+        sat = 85;
+      } else if (level === 1) { // Các nhánh chính
+        light = 82; // Nhạt và sáng
+      } else { // Các nhánh con (cấp 2 trở đi)
+        // Bắt đầu từ độ sáng của nhánh chính (82) và làm nó tối đi
+        light = 82 - (level - 1) * 15;
+        // Đảm bảo không quá tối
+        light = Math.max(50, light);
+      }
       return `hsl(${hue} ${sat}% ${light}%)`;
     }
-
+    
+    // === HÀM ĐÃ THAY ĐỔI ===
     function draw(root, layout){
       const { positions, width, height } = layout;
       canvas.style.width = width + 'px';
@@ -434,7 +448,7 @@
              return;
         }
 
-        if (!node.isVisible) return; // Bỏ qua nếu không hiển thị
+        if (!node.isVisible) return;
 
         const p = positions.get(node.id);
         const el = document.createElement('div');
@@ -445,7 +459,15 @@
         el.style.background = hslForLevel(node.level, branchIndex);
         el.textContent = node.text;
         
-        if (presentationMode && node.children.length > 0) {
+        // === PHẦN MỚI: TÙY CHỈNH NÚT GỐC ===
+        if (node.level === 0) {
+            el.style.fontSize = '17px';
+            el.style.fontWeight = '800';
+            el.style.color = '#050a14'; // Màu chữ tối hơn để dễ đọc trên nền sáng
+        }
+        // === KẾT THÚC PHẦN MỚI ===
+
+        if (presentationMode && node.children.some(c => !c.isVisible)) {
             el.classList.add('presentation-clickable');
             el.onclick = () => {
                 node.children.forEach(child => child.isVisible = true);
