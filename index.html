@@ -9,6 +9,8 @@
       --bg: #0b1220;
       --panel: #0f172a;
       --text: #e2e8f0;
+      --text-dark: #0b1220;
+      --text-light: #f1f5f9;
       --muted: #94a3b8;
       --accent: #60a5fa;
       --node-w: 220px;
@@ -37,7 +39,7 @@
     .right { position: relative; border-radius: 16px; background: linear-gradient(180deg, #0c1425, #0b1220); border: 1px solid #1f2a44; overflow: hidden; box-shadow: var(--shadow); cursor: grab; }
     .right:active { cursor: grabbing; }
     .canvas { position: relative; min-width: 100%; min-height: 100%; transform-origin: 0 0; }
-    .node { position: absolute; width: var(--node-w); max-width: var(--node-w); padding: 10px 12px; border-radius: var(--radius); border: 1px solid rgba(255,255,255,.08); box-shadow: 0 6px 18px rgba(0,0,0,.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); color: #1c1c1c; font-weight: 600; line-height: 1.45; word-wrap: break-word; overflow-wrap: anywhere; transition: transform .12s ease, opacity .3s ease, background .3s ease; }
+    .node { position: absolute; width: var(--node-w); max-width: var(--node-w); padding: 10px 12px; border-radius: var(--radius); border: 1px solid rgba(255,255,255,.08); box-shadow: 0 6px 18px rgba(0,0,0,.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); color: var(--text-dark); font-weight: 600; line-height: 1.45; word-wrap: break-word; overflow-wrap: anywhere; transition: transform .12s ease, opacity .3s ease, background .3s ease; }
     .node:hover { transform: translateY(-1px) scale(1.01); }
     .node.presentation-clickable { cursor: pointer; }
     .svg-layer { position: absolute; inset: 0; pointer-events: none; }
@@ -96,8 +98,14 @@
     const appContainer = document.getElementById('app-container');
     const panelToggleBtn = document.getElementById('panel-toggle-btn');
 
+    let scale = 1, panX = 40, panY = 40;
+    let isPanning = false, startPanX = 0, startPanY = 0;
+    let presentationMode = false;
+    let mindmapTree = {};
+
+    // --- START: COLOR LOGIC ---
     const ROOT_NODE_PALETTE = ['#d586f4','#c3e9cc','#f3a88f','#a6abe7','#eedc96','#f6f3ce','#aae496'];
-    const MAIN_BRANCH_COLORS = ['#B0E0E6','#FFFACD','#D8BFD8','#FFDAB9','#AAF0D1','#EEDFCC','#FFF5E1'];
+    const MAIN_BRANCH_COLORS = ['#FAFAD2', '#B0E0E6', '#FFFACD', '#D8BFD8', '#FFDAB9', '#AAF0D1', '#EEDFCC', '#FFF5E1'];
     let rootNodeColor = ROOT_NODE_PALETTE[Math.floor(Math.random()*ROOT_NODE_PALETTE.length)];
 
     function hexToHsl(hex) {
@@ -106,7 +114,7 @@
       if (!result) return null;
       let r = parseInt(result[1], 16) / 255, g = parseInt(result[2], 16) / 255, b = parseInt(result[3], 16) / 255;
       let max = Math.max(r, g, b), min = Math.min(r, g, b);
-      let h, s, l = (max + min) / 2;
+      let h = 0, s = 0, l = (max + min) / 2;
       if (max == min) { h = s = 0; } else {
         let d = max - min;
         s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
@@ -115,12 +123,81 @@
       }
       return { h: h * 360, s: s, l: l };
     }
+    // --- END: COLOR LOGIC ---
+    
+    panelToggleBtn.addEventListener('click', () => appContainer.classList.toggle('panel-closed'));
+
+    btnPresent.addEventListener('click', () => {
+        presentationMode = !presentationMode;
+        btnPresent.classList.toggle('active', presentationMode);
+        function setVisibility(node, level) {
+            node.isVisible = presentationMode ? level <= 0 : true;
+            node.children.forEach(child => setVisibility(child, level + 1));
+        }
+        setVisibility(mindmapTree, -1);
+        triggerUpdate(false);
+    });
+
+    function applyTransform() { canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; }
+
+    viewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top;
+      const mouseBeforeZoomX = (mouseX - panX) / scale, mouseBeforeZoomY = (mouseY - panY) / scale;
+      const newScale = Math.max(0.2, Math.min(3, scale - e.deltaY * 0.001));
+      panX = mouseX - mouseBeforeZoomX * newScale;
+      panY = mouseY - mouseBeforeZoomY * newScale;
+      scale = newScale;
+      applyTransform();
+    });
+
+    viewport.addEventListener('mousedown', (e) => {
+        if (e.target !== viewport && e.target !== canvas || e.button !== 0) return;
+        isPanning = true;
+        startPanX = e.clientX - panX;
+        startPanY = e.clientY - panY;
+        viewport.style.cursor = 'grabbing';
+    });
+    window.addEventListener('mouseup', () => { isPanning = false; viewport.style.cursor = 'grab'; });
+    window.addEventListener('mousemove', (e) => {
+        if (isPanning) { panX = e.clientX - startPanX; panY = e.clientY - startPanY; applyTransform(); }
+    });
+
+    editor.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = editor.selectionStart, end = editor.selectionEnd;
+        editor.value = editor.value.substring(0, start) + '  ' + editor.value.substring(end);
+        editor.selectionStart = editor.selectionEnd = start + 2;
+        triggerUpdate();
+      }
+    });
+
+    btnDownload.addEventListener('click', () => {
+        const blob = new Blob([editor.value], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'mindmap.txt';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    });
+
+    btnImport.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => { editor.value = event.target.result; triggerUpdate(); };
+        reader.readAsText(file);
+        fileInput.value = '';
+    });
 
     function parseLines(text){
       return text.split(/\r?\n/).map((raw, idx) => {
           const match = raw.match(/^(\s*)(.*)$/);
           const level = Math.floor((match ? match[1] : '').replace(/\t/g, '  ').length / 2);
-          const content = (match ? match[2] : raw).replace(/\s/g, ' ').trim();
+          const content = (match ? match[2] : raw).trim();
           return { id: idx, level, text: content };
         }).filter(n => n.text.length > 0);
     }
@@ -131,71 +208,129 @@
       nodes.forEach(n => {
         while (stack.length && stack[stack.length-1].level >= n.level) stack.pop();
         const parent = stack[stack.length-1] || root;
-        const node = { ...n, children: [], isVisible: true };
+        const node = { ...n, children: [], isVisible: !presentationMode || n.level < 1 };
         parent.children.push(node);
         stack.push(node);
       });
       return root;
     }
-
+    
     function layoutTree(root){
-      const colWidth = 220+120; const rowGap=28; const positions=new Map(); const levelHeights=new Map();
-      function calculateY(node,currentY){
-        const nodeHeight=20+Math.ceil(node.text.length/25)*24+10;
-        let y=currentY;
-        if(levelHeights.has(node.level)&&levelHeights.get(node.level)>y) y=levelHeights.get(node.level);
-        positions.set(node.id,{x:node.level*colWidth,y,w:220,h:nodeHeight});
-        let childY=y;
-        for(const child of node.children) childY=calculateY(child,childY);
-        const newY=childY>y?childY:y+nodeHeight+rowGap;
-        levelHeights.set(node.level,newY);
-        return newY;
-      }
-      let currentY=0;
-      for(const child of root.children) currentY=calculateY(child,currentY);
-      let maxX=0,maxY=0; positions.forEach(p=>{maxX=Math.max(maxX,p.x+p.w); maxY=Math.max(maxY,p.y+p.h);});
-      return {positions,width:maxX+colWidth,height:maxY+rowGap*2};
-    }
+      const colWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--node-w')) + parseInt(getComputedStyle(document.documentElement).getPropertyValue('--col-gap'));
+      const rowGap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--row-gap'));
+      const positions = new Map(), levelHeights = new Map();
 
-    function draw(root,layout){
-      const {positions,width,height}=layout;
-      canvas.style.width=`${width}px`; canvas.style.height=`${height}px`;
-      wires.setAttribute('width',width); wires.setAttribute('height',height);
-      wires.setAttribute('viewBox',`0 0 ${width} ${height}`);
+      function calculateY(node, currentY) {
+          const nodeHeight = 20 + Math.ceil(node.text.length / 25) * 24 + 10;
+          let y = currentY;
+          if (levelHeights.has(node.level) && levelHeights.get(node.level) > y) y = levelHeights.get(node.level);
+          positions.set(node.id, { x: node.level * colWidth, y, w: 220, h: nodeHeight });
+          
+          let childY = y;
+          const visibleChildren = node.children.filter(c => c.isVisible);
+          if (visibleChildren.length > 0) {
+              const childrenTotalHeight = visibleChildren.reduce((acc, child) => {
+                  const childHeight = 20 + Math.ceil(child.text.length / 25) * 24 + 10;
+                  return acc + childHeight + rowGap;
+              }, -rowGap);
+              const parentPos = positions.get(node.id);
+              if (childrenTotalHeight > nodeHeight) {
+                  parentPos.y = y + childrenTotalHeight / 2 - parentPos.h / 2;
+                  positions.set(node.id, parentPos);
+              }
+          }
+          for (const child of visibleChildren) childY = calculateY(child, childY);
+          const newY = childY > y ? childY : y + nodeHeight + rowGap;
+          levelHeights.set(node.level, newY);
+          return newY;
+      }
+      let currentY = 0;
+      for(const child of root.children.filter(c => c.isVisible)) currentY = calculateY(child, currentY);
+      let maxX = 0, maxY = 0;
+      positions.forEach(p => { maxX = Math.max(maxX, p.x + p.w); maxY = Math.max(maxY, p.y + p.h); });
+      return { positions, width: maxX + colWidth, height: maxY + rowGap * 2 };
+    }
+    
+    function draw(root, layout){
+      const { positions, width, height } = layout;
+      canvas.style.width = `${width}px`; canvas.style.height = `${height}px`;
+      wires.setAttribute('width', width); wires.setAttribute('height', height); wires.setAttribute('viewBox', `0 0 ${width} ${height}`);
       wires.innerHTML='';
       const fragment=document.createDocumentFragment();
       [...canvas.querySelectorAll('.node')].forEach(n=>n.remove());
 
-      function render(node,parent,branchIndex,baseBranchColor){
-        if(node.id==='root'){
-          node.children.forEach((child,index)=>render(child,node,index,null));
+      function render(node, parent, branchIndex, baseBranchColor){
+        if(node.id === 'root'){
+          node.children.forEach((child, index) => render(child, node, index, null));
           return;
         }
-        let currentBaseColor=baseBranchColor;
-        if(node.level===1){ currentBaseColor=MAIN_BRANCH_COLORS[branchIndex%MAIN_BRANCH_COLORS.length]; }
-        let finalNodeColor=currentBaseColor;
-        if(node.level>1){ const baseHsl=hexToHsl(currentBaseColor); if(baseHsl){ let newLightness=baseHsl.l*100-(node.level-1)*10; newLightness=Math.max(25,newLightness); finalNodeColor=`hsl(${baseHsl.h},${baseHsl.s*100}%,${newLightness}%)`; } }
-        if(node.level===0){ finalNodeColor=rootNodeColor; }
-        const p=positions.get(node.id);
-        const el=document.createElement('div'); el.className='node';
-        el.style.left=`${p.x}px`; el.style.top=`${p.y}px`; el.style.height=`${p.h}px`; el.style.background=finalNodeColor; el.textContent=node.text;
-        if(node.level===0){ el.style.fontSize='18px'; el.style.fontWeight='900'; el.style.color='#101010'; }
+        if(!node.isVisible) return;
+        
+        let currentBaseColor = baseBranchColor;
+        let finalNodeColor = currentBaseColor;
+        
+        if(node.level === 0){
+            finalNodeColor = rootNodeColor;
+        } else if (node.level === 1) {
+            currentBaseColor = MAIN_BRANCH_COLORS[branchIndex % MAIN_BRANCH_COLORS.length];
+            finalNodeColor = currentBaseColor;
+        } else if (node.level > 1) {
+            const baseHsl = hexToHsl(currentBaseColor);
+            if (baseHsl) {
+                let newLightness = baseHsl.l * 100 - (node.level - 1) * 10;
+                newLightness = Math.max(25, newLightness);
+                finalNodeColor = `hsl(${baseHsl.h}, ${baseHsl.s * 100}%, ${newLightness}%)`;
+            }
+        }
+
+        const p = positions.get(node.id);
+        const el = document.createElement('div');
+        el.className = 'node';
+        el.style.left = `${p.x}px`; el.style.top = `${p.y}px`; el.style.height = `${p.h}px`;
+        el.style.background = finalNodeColor;
+        el.textContent = node.text;
+
+        const finalHsl = hexToHsl(finalNodeColor);
+        if(finalHsl && finalHsl.l < 0.65) el.style.color = 'var(--text-light)';
+        else el.style.color = 'var(--text-dark)';
+        
+        if (node.level === 0) { el.style.fontSize = '18px'; el.style.fontWeight = '900'; }
+        
+        if (presentationMode && node.children.some(c => !c.isVisible)) {
+            el.classList.add('presentation-clickable');
+            el.onclick = () => { node.children.forEach(c => c.isVisible = true); triggerUpdate(false); };
+        }
+        
         fragment.appendChild(el);
-        if(parent&&parent.id!=='root'){ const a=positions.get(parent.id),p_pos=positions.get(node.id); const[x1,y1,x2,y2]=[a.x+a.w,a.y+a.h/2,p_pos.x,p_pos.y+p_pos.h/2]; const dx=Math.max(40,(x2-x1)/2); const path=document.createElementNS('http://www.w3.org/2000/svg','path'); path.setAttribute('d',`M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`); path.setAttribute('fill','none'); path.setAttribute('stroke','rgba(148,163,184,.6)'); path.setAttribute('stroke-width','2'); path.setAttribute('stroke-linecap','round'); wires.appendChild(path);} 
-        node.children.forEach((child,index)=>render(child,node,index,currentBaseColor));
+        if(parent && parent.id!=='root' && parent.isVisible){
+            const a = positions.get(parent.id), p_pos=positions.get(node.id);
+            const [x1, y1, x2, y2] = [a.x+a.w, a.y+a.h/2, p_pos.x, p_pos.y+p_pos.h/2];
+            const dx = Math.max(40, (x2 - x1) / 2);
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`);
+            path.setAttribute('fill', 'none');
+            path.setAttribute('stroke','rgba(148,163,184,.6)');
+            path.setAttribute('stroke-width','2');
+            path.setAttribute('stroke-linecap','round');
+            wires.appendChild(path);
+        }
+        node.children.forEach((child, index) => render(child, node, branchIndex, currentBaseColor));
       }
-      render(root,null,0,null);
-      canvas.insertBefore(fragment,wires);
+      render(root, null, 0, null);
+      canvas.insertBefore(fragment, wires);
     }
 
-    function triggerUpdate(){
-      const nodes=parseLines(editor.value);
-      mindmapTree=buildTree(nodes);
-      const layout=layoutTree(mindmapTree);
-      draw(mindmapTree,layout);
+    let raf;
+    function triggerUpdate(reparse = true){
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (reparse) { mindmapTree = buildTree(parseLines(editor.value)); }
+        draw(mindmapTree, layoutTree(mindmapTree));
+      });
     }
 
-    editor.addEventListener('input',()=>triggerUpdate());
+    editor.addEventListener('input', () => triggerUpdate());
+    applyTransform();
     triggerUpdate();
   </script>
 </body>
