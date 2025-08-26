@@ -105,7 +105,7 @@
 
     // --- START: COLOR LOGIC ---
     const ROOT_NODE_PALETTE = ['#d586f4','#c3e9cc','#f3a88f','#a6abe7','#eedc96','#f6f3ce','#aae496'];
-    const MAIN_BRANCH_COLORS = ['#FAFAD2', '#B0E0E6', '#FFFACD', '#D8BFD8', '#FFDAB9', '#AAF0D1', '#EEDFCC', '#FFF5E1'];
+    const MAIN_BRANCH_COLORS = ['#B0E0E6','#FFFACD','#D8BFD8','#FFDAB9','#AAF0D1','#EEDFCC','#FFF5E1'];
     let rootNodeColor = ROOT_NODE_PALETTE[Math.floor(Math.random()*ROOT_NODE_PALETTE.length)];
 
     function hexToHsl(hex) {
@@ -314,7 +314,11 @@
             path.setAttribute('stroke-linecap','round');
             wires.appendChild(path);
         }
-        node.children.forEach((child, index) => render(child, node, branchIndex, currentBaseColor));
+        
+        // --- START: SỬA LỖI TẠI ĐÂY ---
+        // Truyền `index` của nút con thay vì `branchIndex` của nút cha
+        node.children.forEach((child, index) => render(child, node, index, currentBaseColor));
+        // --- END: SỬA LỖI TẠI ĐÂY ---
       }
       render(root, null, 0, null);
       canvas.insertBefore(fragment, wires);
