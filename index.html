@@ -13,8 +13,8 @@
       --accent: #60a5fa;
       --node-w: 220px;
       --node-h: auto;
-      --col-gap: 120px; /* khoảng cách ngang giữa các cấp */
-      --row-gap: 28px;  /* khoảng cách dọc tối thiểu giữa các nút */
+      --col-gap: 120px;
+      --row-gap: 28px;
       --radius: 14px;
       --shadow: 0 8px 24px rgba(0,0,0,.35);
       --left-panel-width: 420px;
@@ -194,7 +194,7 @@
         • Gõ / xóa: sơ đồ <b>cập nhật ngay</b>. Dùng <kbd>Tab</kbd> để thụt đầu dòng.<br/>
         • Lăn chuột để <b>phóng to/thu nhỏ</b>, kéo chuột để <b>di chuyển</b>.<br/>
       </div>
-      <textarea id="editor" spellcheck="false" placeholder="Nhập nội dung ở đây...\nVí dụ:\nChủ đề\n  Nhánh 1\n    Ý 1.1\n    Ý 1.2\n  Nhánh 2\n    Ý 2.1\n      Chi tiết 2.1.1\n  Nhánh 3">Học Tiếng Anh
+      <textarea id="editor" spellcheck="false">Học Tiếng Anh
   Học Ngữ Pháp
     Thì Hiện tại đơn
     Thì Quá khứ đơn
@@ -228,21 +228,20 @@
     const appContainer = document.getElementById('app-container');
     const panelToggleBtn = document.getElementById('panel-toggle-btn');
 
-    const ROOT_NODE_PALETTE = ['#d586f4', '#c3e9cc', '#f3a88f', '#a6abe7', '#eedc96', '#f6f3ce', '#aae496'];
+    const ROOT_NODE_PALETTE = [
+      '#d586f4','#c3e9cc','#f3a88f','#a6abe7','#eedc96','#f6f3ce','#aae496'
+    ];
 
-    const BRANCH_COLOR_MAP = new Map([
-        ['Học Ngữ Pháp', '#B0E0E6'],
-        ['Học Từ Vựng',  '#D8BFD8'],
-        ['Học Phát Âm',  '#FFFACD']
-    ]);
+    const MAIN_BRANCH_COLORS = [
+      '#B0E0E6','#FFFACD','#D8BFD8','#FFDAB9','#AAF0D1','#EEDFCC','#FFF5E1'
+    ];
 
-    const FALLBACK_BRANCH_PALETTE = ['#FAFAD2', '#FFDAB9', '#AAF0D1', '#EEDFCC', '#FFF5E1'];
+    let rootNodeColor = ROOT_NODE_PALETTE[Math.floor(Math.random()*ROOT_NODE_PALETTE.length)];
 
     let scale = 1, panX = 40, panY = 40;
     let isPanning = false, startPanX = 0, startPanY = 0;
     let presentationMode = false;
     let mindmapTree = {};
-    let rootNodeColor = ROOT_NODE_PALETTE[0];
 
     function hexToHsl(hex) {
       if (!hex) return null;
@@ -263,77 +262,12 @@
       }
       return { h: h * 360, s: s, l: l };
     }
-    
-    panelToggleBtn.addEventListener('click', () => appContainer.classList.toggle('panel-closed'));
-    btnPresent.addEventListener('click', () => {
-        presentationMode = !presentationMode;
-        btnPresent.classList.toggle('active', presentationMode);
-        function setVisibility(node, level) {
-            if (presentationMode) node.isVisible = level <= 0;
-            else node.isVisible = true;
-            node.children.forEach(child => setVisibility(child, level + 1));
-        }
-        setVisibility(mindmapTree, -1);
-        triggerUpdate(false);
-    });
-
-    function applyTransform() { canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; }
-    viewport.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const rect = viewport.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top;
-      const mouseBeforeZoomX = (mouseX - panX) / scale, mouseBeforeZoomY = (mouseY - panY) / scale;
-      const newScale = Math.max(0.2, Math.min(3, scale - e.deltaY * 0.001));
-      panX = mouseX - mouseBeforeZoomX * newScale;
-      panY = mouseY - mouseBeforeZoomY * newScale;
-      scale = newScale;
-      applyTransform();
-    });
-
-    viewport.addEventListener('mousedown', (e) => {
-        if (e.target !== viewport && e.target !== canvas || e.button !== 0) return;
-        isPanning = true;
-        startPanX = e.clientX - panX;
-        startPanY = e.clientY - panY;
-        viewport.style.cursor = 'grabbing';
-    });
-    window.addEventListener('mouseup', () => { isPanning = false; viewport.style.cursor = 'grab'; });
-    window.addEventListener('mousemove', (e) => { if (isPanning) { panX = e.clientX - startPanX; panY = e.clientY - startPanY; applyTransform(); } });
-
-    editor.addEventListener('keydown', (e) => {
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        const start = editor.selectionStart, end = editor.selectionEnd;
-        editor.value = editor.value.substring(0, start) + '  ' + editor.value.substring(end);
-        editor.selectionStart = editor.selectionEnd = start + 2;
-        triggerUpdate();
-      }
-    });
-
-    btnDownload.addEventListener('click', () => {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(new Blob([editor.value], { type: 'text/plain' }));
-        a.download = 'mindmap.txt';
-        a.click();
-        URL.revokeObjectURL(a.href);
-    });
-    btnImport.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => { editor.value = event.target.result; triggerUpdate(); };
-        reader.readAsText(file);
-        fileInput.value = '';
-    });
 
     function parseLines(text){
       return text.split(/\r?\n/)
         .map((raw, idx) => {
           const match = raw.match(/^(\s*)(.*)$/);
           const level = Math.floor((match ? match[1] : '').replace(/\t/g, '  ').length / 2);
-          // === DÒNG SỬA LỖI DUY NHẤT NẰM Ở ĐÂY ===
-          // Thay thế các ký tự khoảng trắng đặc biệt (như non-breaking space) bằng dấu cách thường
           const content = (match ? match[2] : raw).replace(/\s/g, ' ').trim();
           return { id: idx, level, text: content };
         })
@@ -352,10 +286,10 @@
       });
       return root;
     }
-    
+
     function layoutTree(root){
-      const colWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--node-w')) + parseInt(getComputedStyle(document.documentElement).getPropertyValue('--col-gap'));
-      const rowGap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--row-gap'));
+      const colWidth = 220 + 120;
+      const rowGap = 28;
       const positions = new Map();
       const levelHeights = new Map();
       function calculateY(node, currentY) {
@@ -365,12 +299,6 @@
           positions.set(node.id, { x: node.level * colWidth, y, w: 220, h: nodeHeight });
           let childY = y;
           const visibleChildren = node.children.filter(c => c.isVisible);
-          if (visibleChildren.length > 1) {
-            const childrenHeight = visibleChildren.reduce((acc, child) => acc + (20 + Math.ceil(child.text.length / 25) * 24 + 10) + rowGap, 0) - rowGap;
-            const parentPos = positions.get(node.id);
-            parentPos.y = y + childrenHeight / 2 - parentPos.h / 2;
-            positions.set(node.id, parentPos);
-          }
           for (const child of visibleChildren) childY = calculateY(child, childY);
           const newY = childY > y ? childY : y + nodeHeight + rowGap;
           levelHeights.set(node.level, newY);
@@ -382,7 +310,7 @@
       positions.forEach(p => { maxX = Math.max(maxX, p.x + p.w); maxY = Math.max(maxY, p.y + p.h); });
       return { positions, width: maxX + colWidth, height: maxY + rowGap * 2 };
     }
-    
+
     function draw(root, layout){
       const { positions, width, height } = layout;
       canvas.style.width = `${width}px`; canvas.style.height = `${height}px`;
@@ -391,29 +319,29 @@
       wires.innerHTML = '';
       const fragment = document.createDocumentFragment();
       [...canvas.querySelectorAll('.node')].forEach(n => n.remove());
-      
+
       function render(node, parent, branchIndex, baseBranchColor) {
         if (node.id === 'root') {
              node.children.forEach((child, index) => render(child, node, index, null));
              return;
         }
         if (!node.isVisible) return;
-        
+
         let currentBaseColor = baseBranchColor;
         if (node.level === 1) {
-            currentBaseColor = BRANCH_COLOR_MAP.get(node.text) || FALLBACK_BRANCH_PALETTE[branchIndex % FALLBACK_BRANCH_PALETTE.length];
+            currentBaseColor = MAIN_BRANCH_COLORS[branchIndex % MAIN_BRANCH_COLORS.length];
         }
 
         let finalNodeColor = currentBaseColor;
         if (node.level > 1) {
             const baseHsl = hexToHsl(currentBaseColor);
             if(baseHsl) {
-                let newLightness = baseHsl.l * 100 - (node.level - 1) * 8;
-                newLightness = Math.max(30, newLightness);
+                let newLightness = baseHsl.l * 100 - (node.level - 1) * 10;
+                newLightness = Math.max(25, newLightness);
                 finalNodeColor = `hsl(${baseHsl.h}, ${baseHsl.s * 100}%, ${newLightness}%)`;
             }
         }
-        
+
         if (node.level === 0) {
             finalNodeColor = rootNodeColor;
         }
@@ -424,14 +352,11 @@
         el.style.left = `${p.x}px`; el.style.top = `${p.y}px`; el.style.height = `${p.h}px`;
         el.style.background = finalNodeColor;
         el.textContent = node.text;
-        
+
         if (node.level === 0) {
             el.style.fontSize = '18px'; el.style.fontWeight = '900'; el.style.color = '#101010';
         }
-        if (presentationMode && node.children.some(c => !c.isVisible)) {
-            el.classList.add('presentation-clickable');
-            el.onclick = () => { node.children.forEach(c => c.isVisible = true); triggerUpdate(false); };
-        }
+
         fragment.appendChild(el);
         if (parent && parent.id !== 'root' && parent.isVisible){
           const a = positions.get(parent.id), p_pos = positions.get(node.id);
@@ -443,29 +368,23 @@
           path.setAttribute('stroke-width', '2'); path.setAttribute('stroke-linecap', 'round');
           wires.appendChild(path);
         }
-        
+
         node.children.forEach(child => render(child, node, branchIndex, currentBaseColor));
       }
       render(root, null, 0, null);
       canvas.insertBefore(fragment, wires);
     }
 
-    let raf;
     function triggerUpdate(reparse = true){
-      if (raf) cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
         if (reparse) {
             const nodes = parseLines(editor.value);
             mindmapTree = buildTree(nodes);
-            rootNodeColor = ROOT_NODE_PALETTE[Math.floor(Math.random() * ROOT_NODE_PALETTE.length)];
         }
         const layout = layoutTree(mindmapTree);
         draw(mindmapTree, layout);
-      });
     }
 
     editor.addEventListener('input', () => triggerUpdate());
-    applyTransform();
     triggerUpdate();
   </script>
 </body>
