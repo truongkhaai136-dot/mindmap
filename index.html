@@ -106,14 +106,12 @@
     const appContainer = document.getElementById('app-container');
     const panelToggleBtn = document.getElementById('panel-toggle-btn');
     
-    // --- START: IMAGE FEATURE ELEMENTS ---
     const btnSetBg = document.getElementById('btnSetBg');
     const btnAddImage = document.getElementById('btnAddImage');
     const btnRemoveBg = document.getElementById('btnRemoveBg');
     const bgFileInput = document.getElementById('bgFileInput');
     const imageFileInput = document.getElementById('imageFileInput');
     const originalViewportBg = viewport.style.background;
-    // --- END: IMAGE FEATURE ELEMENTS ---
 
     let scale = 1, panX = 40, panY = 40;
     let isPanning = false, startPanX = 0, startPanY = 0;
@@ -179,12 +177,14 @@
             
             container.appendChild(img);
             container.appendChild(handle);
-            canvas.prepend(container); // prepend để ảnh nằm dưới các node
+            canvas.appendChild(container); 
             
-            // Căn giữa ảnh mới chèn
             const canvasRect = canvas.getBoundingClientRect();
-            container.style.left = `${(canvasRect.width / 2) / scale - 125}px`;
-            container.style.top = `${(canvasRect.height / 2) / scale - 100}px`;
+            const initialLeft = (viewport.offsetWidth / 2 - panX) / scale - 125;
+            const initialTop = (viewport.offsetHeight / 2 - panY) / scale - 100;
+
+            container.style.left = `${initialLeft}px`;
+            container.style.top = `${initialTop}px`;
 
             makeImageInteractive(container, handle);
         };
@@ -194,11 +194,10 @@
 
     function makeImageInteractive(container, handle) {
         let isDragging = false, isResizing = false;
-        let startX, startY, startLeft, startTop, startWidth, startHeight;
+        let startX, startY, startLeft, startTop, startWidth;
 
-        // Di chuyển ảnh
         container.addEventListener('mousedown', (e) => {
-            if (e.target !== container) return; // Chỉ kéo khi bấm vào container, không phải handle
+            if (e.target !== container) return;
             e.preventDefault();
             isDragging = true;
             
@@ -225,16 +224,13 @@
             window.removeEventListener('mouseup', onMouseUpDrag);
         }
 
-        // Thay đổi kích thước
         handle.addEventListener('mousedown', (e) => {
             e.preventDefault();
             e.stopPropagation();
             isResizing = true;
             
             startX = e.clientX;
-            startY = e.clientY;
             startWidth = container.offsetWidth;
-            startHeight = container.offsetHeight;
 
             window.addEventListener('mousemove', onMouseMoveResize);
             window.addEventListener('mouseup', onMouseUpResize);
@@ -282,7 +278,6 @@
     });
 
     viewport.addEventListener('mousedown', (e) => {
-        // Ngăn kéo map khi đang tương tác với ảnh
         if (e.target.closest('.draggable-image-container')) return;
         if (e.target !== viewport && e.target !== canvas || e.button !== 0) return;
         isPanning = true;
@@ -388,6 +383,7 @@
       wires.setAttribute('width', width); wires.setAttribute('height', height); wires.setAttribute('viewBox', `0 0 ${width} ${height}`);
       wires.innerHTML='';
       const fragment=document.createDocumentFragment();
+      // Chỉ xóa các node cũ, không xóa ảnh
       [...canvas.querySelectorAll('.node')].forEach(n=>n.remove());
 
       function render(node, parent, branchIndex, baseBranchColor){
@@ -453,17 +449,16 @@
     }
 
     let raf;
+    // --- START: SỬA LỖI TẠI ĐÂY ---
+    // Đã xóa logic thừa và sai trong hàm này
     function triggerUpdate(reparse = true){
       if (raf) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         if (reparse) { mindmapTree = buildTree(parseLines(editor.value)); }
-        // Lưu lại các ảnh đang có trên canvas
-        const images = [...canvas.querySelectorAll('.draggable-image-container')];
         draw(mindmapTree, layoutTree(mindmapTree));
-        // Thêm lại các ảnh vào canvas sau khi vẽ lại mindmap
-        images.forEach(img => canvas.prepend(img));
       });
     }
+    // --- END: SỬA LỖI TẠI ĐÂY ---
 
     editor.addEventListener('input', () => triggerUpdate());
     applyTransform();
