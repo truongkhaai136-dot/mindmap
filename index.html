@@ -44,7 +44,6 @@
       overflow: hidden; 
       box-shadow: var(--shadow); 
       cursor: grab; 
-      /* CSS cho hình nền */
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
@@ -62,7 +61,6 @@
     #panel-toggle-btn { position: fixed; top: 20px; left: calc(var(--left-panel-width) + 4px); z-index: 100; width: 28px; height: 28px; background: #1f2937; color: var(--text); border: 1px solid #2a3b63; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: left 0.4s ease, transform 0.3s ease; }
     .app.panel-closed + #panel-toggle-btn { left: 10px; transform: scaleX(-1); }
     
-    /* CSS cho ảnh di động */
     #image-container {
       position: absolute;
       display: none;
@@ -79,7 +77,7 @@
       width: 100%;
       height: 100%;
       display: block;
-      pointer-events: none; /* Quan trọng để sự kiện chuột đi qua ảnh */
+      pointer-events: none;
     }
     .resize-handle {
       position: absolute;
@@ -104,12 +102,10 @@
         <button class="btn" id="btnDownload">Tải Mindmap</button>
         <button class="btn" id="btnImport">Nhập Mindmap</button>
         <button class="btn" id="btnPresent">Thuyết trình</button>
-        <!-- Nút mới cho tính năng ảnh -->
         <button class="btn" id="btnChangeBg">Đổi nền</button>
         <button class="btn" id="btnAddImage">Thêm ảnh</button>
         
-        <!-- Input ẩn cho tải file -->
-        <input type="file" id="fileInput" accept=".txt" style="display: none;">
+        <input type="file" id="importFileInput" accept=".mindmap" style="display: none;">
         <input type="file" id="bgInput" accept="image/*" style="display: none;">
         <input type="file" id="imageInput" accept="image/*" style="display: none;">
       </div>
@@ -132,7 +128,6 @@
     Phụ âm</textarea>
     </div>
     <div class="right" id="viewport">
-      <!-- Container cho ảnh di động -->
       <div id="image-container">
         <img id="movable-image" src="">
         <div class="resize-handle"></div>
@@ -150,12 +145,10 @@
     const viewport = document.getElementById('viewport');
     const btnDownload = document.getElementById('btnDownload');
     const btnImport = document.getElementById('btnImport');
-    const fileInput = document.getElementById('fileInput');
+    const importFileInput = document.getElementById('importFileInput');
     const btnPresent = document.getElementById('btnPresent');
     const appContainer = document.getElementById('app-container');
     const panelToggleBtn = document.getElementById('panel-toggle-btn');
-
-    // --- START: Biến và DOM elements cho tính năng ảnh ---
     const btnChangeBg = document.getElementById('btnChangeBg');
     const bgInput = document.getElementById('bgInput');
     const btnAddImage = document.getElementById('btnAddImage');
@@ -163,14 +156,12 @@
     const imageContainer = document.getElementById('image-container');
     const movableImage = document.getElementById('movable-image');
     const resizeHandle = document.querySelector('.resize-handle');
-    // --- END: Biến và DOM elements cho tính năng ảnh ---
 
     let scale = 1, panX = 40, panY = 40;
     let isPanning = false, startPanX = 0, startPanY = 0;
     let presentationMode = false;
     let mindmapTree = {};
 
-    // --- START: COLOR LOGIC ---
     const ROOT_NODE_PALETTE = ['#d586f4','#c3e9cc','#f3a88f','#a6abe7','#eedc96','#f6f3ce','#aae496'];
     const MAIN_BRANCH_COLORS = ['#B0E0E6','#FFFACD','#D8BFD8','#FFDAB9','#AAF0D1','#EEDFCC','#FFF5E1'];
     let rootNodeColor = ROOT_NODE_PALETTE[Math.floor(Math.random()*ROOT_NODE_PALETTE.length)];
@@ -190,41 +181,43 @@
       }
       return { h: h * 360, s: s, l: l };
     }
-    // --- END: COLOR LOGIC ---
     
-    // --- START: SỬA LỖI BIẾN DẠNG KHI THU GỌN PANEL ---
+    // --- START: SỬA LỖI DI CHUYỂN ẢNH KHI THU GỌN PANEL ---
     panelToggleBtn.addEventListener('click', () => {
-        // Đọc chiều rộng của panel trái từ biến CSS
         const leftPanelWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--left-panel-width'));
-        // Kiểm tra xem panel đang đóng hay mở để quyết định hành động
         const isOpening = appContainer.classList.contains('panel-closed');
-
-        // Tạm thời thêm hiệu ứng chuyển động (transition) cho canvas để pan mượt mà
+        
+        // Thêm hiệu ứng chuyển động mượt mà cho canvas và ảnh
         canvas.style.transition = 'transform 0.4s ease';
+        imageContainer.style.transition = 'left 0.4s ease';
 
-        // Điều chỉnh giá trị panX để bù lại cho chiều rộng của panel
+        // Điều chỉnh vị trí pan của mindmap
         if (isOpening) {
-            // Khi mở panel, viewport dịch sang phải, vì vậy ta pan nội dung sang trái (giảm panX)
-            // để giữ nội dung ở nguyên vị trí trên màn hình.
             panX -= leftPanelWidth;
         } else {
-            // Khi đóng panel, viewport dịch sang trái, vì vậy ta pan nội dung sang phải (tăng panX).
             panX += leftPanelWidth;
         }
+
+        // Điều chỉnh vị trí của ảnh di động nếu nó đang hiển thị
+        if (imageContainer.style.display !== 'none') {
+            const currentLeft = parseInt(imageContainer.style.left, 10) || 0;
+            if (isOpening) {
+                imageContainer.style.left = `${currentLeft - leftPanelWidth}px`;
+            } else {
+                imageContainer.style.left = `${currentLeft + leftPanelWidth}px`;
+            }
+        }
         
-        // Chuyển đổi class để điều khiển layout grid (ẩn/hiện panel)
         appContainer.classList.toggle('panel-closed');
-        
-        // Áp dụng transform mới; transition sẽ làm cho nó chuyển động mượt mà
         applyTransform();
 
-        // Xóa transition sau khi hiệu ứng kết thúc (400ms)
-        // để nó không ảnh hưởng đến việc pan và zoom thông thường bằng chuột.
+        // Xóa hiệu ứng chuyển động sau khi hoàn tất để không ảnh hưởng tới thao tác kéo thả
         setTimeout(() => {
             canvas.style.transition = 'none';
+            imageContainer.style.transition = 'none';
         }, 400);
     });
-    // --- END: SỬA LỖI BIẾN DẠNG KHI THU GỌN PANEL ---
+    // --- END: SỬA LỖI DI CHUYỂN ẢNH KHI THU GỌN PANEL ---
 
     btnPresent.addEventListener('click', () => {
         presentationMode = !presentationMode;
@@ -240,7 +233,6 @@
     function applyTransform() { canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; }
 
     viewport.addEventListener('wheel', (e) => {
-      // Ngăn phóng to/thu nhỏ canvas nếu đang cuộn trên ảnh di động
       if (e.target.closest('#image-container')) return;
       e.preventDefault();
       const rect = viewport.getBoundingClientRect();
@@ -254,7 +246,6 @@
     });
 
     viewport.addEventListener('mousedown', (e) => {
-        // Ngăn di chuyển canvas nếu đang tương tác với ảnh di động
         if (e.target.closest('#image-container') || e.button !== 0) return;
         isPanning = true;
         startPanX = e.clientX - panX;
@@ -277,27 +268,70 @@
     });
 
     btnDownload.addEventListener('click', () => {
-        const blob = new Blob([editor.value], { type: 'text/plain' });
+        const state = {
+            text: editor.value,
+            background: viewport.style.backgroundImage,
+            movableImage: {
+                src: movableImage.src,
+                style: {
+                    display: imageContainer.style.display,
+                    top: imageContainer.style.top,
+                    left: imageContainer.style.left,
+                    width: imageContainer.style.width,
+                    height: imageContainer.style.height,
+                }
+            },
+            presentationMode: presentationMode,
+            panX: panX,
+            panY: panY,
+            scale: scale
+        };
+
+        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'mindmap.txt';
+        a.download = 'mindmap-data.mindmap';
         a.click();
         URL.revokeObjectURL(a.href);
     });
 
-    btnImport.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', (e) => {
+    btnImport.addEventListener('click', () => importFileInput.click());
+    importFileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = (event) => { editor.value = event.target.result; triggerUpdate(); };
+        reader.onload = (event) => {
+            try {
+                const state = JSON.parse(event.target.result);
+                loadState(state);
+            } catch (error) {
+                console.error("Lỗi khi đọc tệp mindmap:", error);
+                alert("Tệp mindmap không hợp lệ hoặc đã bị lỗi.");
+            }
+        };
         reader.readAsText(file);
-        fileInput.value = '';
+        importFileInput.value = '';
     });
 
-    // --- START: LOGIC CHO TÍNH NĂNG ẢNH ---
+    function loadState(state) {
+        editor.value = state.text || '';
+        viewport.style.backgroundImage = state.background || '';
+        if (state.movableImage && state.movableImage.src && state.movableImage.src.startsWith('data:image')) {
+            movableImage.src = state.movableImage.src;
+            Object.assign(imageContainer.style, state.movableImage.style);
+        } else {
+            imageContainer.style.display = 'none';
+            movableImage.src = '';
+        }
+        presentationMode = state.presentationMode || false;
+        btnPresent.classList.toggle('active', presentationMode);
+        panX = state.panX || 40;
+        panY = state.panY || 40;
+        scale = state.scale || 1;
+        applyTransform();
+        triggerUpdate(true);
+    }
 
-    // 1. Đổi hình nền
     btnChangeBg.addEventListener('click', () => bgInput.click());
     bgInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
@@ -310,7 +344,6 @@
         bgInput.value = '';
     });
 
-    // 2. Thêm ảnh di động
     btnAddImage.addEventListener('click', () => imageInput.click());
     imageInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
@@ -324,30 +357,24 @@
         imageInput.value = '';
     });
 
-    // 3. Logic di chuyển, thay đổi kích thước, phóng to/thu nhỏ ảnh
     let isDragging = false, isResizing = false;
     let imgOffsetX, imgOffsetY;
     
     imageContainer.addEventListener('mousedown', (e) => {
-        // Chỉ bắt đầu kéo nếu click vào container, không phải handle resize
         if (e.target === resizeHandle) return;
-        e.stopPropagation(); // Ngăn canvas di chuyển
+        e.stopPropagation();
         isDragging = true;
         imgOffsetX = e.clientX - imageContainer.offsetLeft;
         imgOffsetY = e.clientY - imageContainer.offsetTop;
     });
 
     resizeHandle.addEventListener('mousedown', (e) => {
-        e.stopPropagation(); // Ngăn canvas di chuyển
+        e.stopPropagation();
         isResizing = true;
-        // Lưu vị trí chuột và kích thước ban đầu
         imgOffsetX = e.clientX;
         imgOffsetY = e.clientY;
         const initialWidth = imageContainer.offsetWidth;
         const initialHeight = imageContainer.offsetHeight;
-
-        window.addEventListener('mousemove', resizeImage);
-        window.addEventListener('mouseup', stopResize);
 
         function resizeImage(event) {
             if (isResizing) {
@@ -357,12 +384,13 @@
                 imageContainer.style.height = `${initialHeight + dy}px`;
             }
         }
-
         function stopResize() {
             isResizing = false;
             window.removeEventListener('mousemove', resizeImage);
             window.removeEventListener('mouseup', stopResize);
         }
+        window.addEventListener('mousemove', resizeImage);
+        window.addEventListener('mouseup', stopResize);
     });
 
     window.addEventListener('mousemove', (e) => {
@@ -376,20 +404,14 @@
         isDragging = false;
     });
 
-    // Phóng to/thu nhỏ ảnh bằng lăn chuột
     imageContainer.addEventListener('wheel', (e) => {
         e.preventDefault();
         e.stopPropagation();
         const currentWidth = imageContainer.offsetWidth;
-        const scaleFactor = e.deltaY < 0 ? 1.1 : 0.9; // Phóng to nếu cuộn lên, thu nhỏ nếu cuộn xuống
+        const scaleFactor = e.deltaY < 0 ? 1.1 : 0.9;
         imageContainer.style.width = `${currentWidth * scaleFactor}px`;
-        // Giữ tỷ lệ khung hình
         imageContainer.style.height = 'auto'; 
     });
-
-
-    // --- END: LOGIC CHO TÍNH NĂNG ẢNH ---
-
 
     function parseLines(text){
       return text.split(/\r?\n/).map((raw, idx) => {
