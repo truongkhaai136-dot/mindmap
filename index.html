@@ -14,6 +14,7 @@
             background-color: #eef2f9;
         }
 
+        /* Style cho form nhập liệu ở trên cùng */
         #controls {
             padding: 15px;
             background-color: #fff;
@@ -43,15 +44,15 @@
             background-color: #0056b3;
         }
         
-        /* -- PHẦN CSS NÂNG CẤP -- */
+        /* Container chính cho 2 khung làm việc */
         .dashboard-container {
             display: grid;
-            /* Sử dụng biến CSS để dễ dàng thay đổi bằng JavaScript */
+            /* Sử dụng biến CSS để JavaScript có thể điều chỉnh độ rộng */
             grid-template-columns: var(--left-width, 1fr) 10px var(--right-width, 2fr);
-            height: calc(100vh - 75px);
+            height: calc(100vh - 75px); /* Chiều cao màn hình trừ đi phần form */
             padding: 8px;
             box-sizing: border-box;
-            gap: 0; /* Bỏ khoảng cách gap */
+            gap: 0; 
         }
 
         .dashboard-iframe {
@@ -63,7 +64,7 @@
             background-color: #fff;
         }
 
-        /* Style cho thanh kéo phân chia */
+        /* Thanh kéo ở giữa */
         #resizer {
             background-color: #ccc;
             cursor: col-resize; /* Đổi con trỏ chuột khi di vào */
@@ -91,7 +92,7 @@
     </div>
 
     <script>
-        // --- Code cũ để tải nội dung iframe ---
+        // --- Code để tải nội dung khi nhấn nút ---
         const loadButton = document.getElementById('load-button');
         const pdfInput = document.getElementById('pdf-input');
         const mindmapInput = document.getElementById('mindmap-input');
@@ -102,16 +103,18 @@
             const pdfUrl = pdfInput.value;
             const mindmapUrl = mindmapInput.value;
 
+            // Kiểm tra và tải link PDF
             if (pdfUrl.trim() !== "") {
                 pdfIframe.src = pdfUrl;
             }
 
+            // Kiểm tra và tải link Mindmap
             if (mindmapUrl.trim() !== "") {
                 mindmapIframe.src = mindmapUrl;
             }
         });
 
-        // --- PHẦN JAVASCRIPT MỚI ĐỂ XỬ LÝ KÉO THẢ ---
+        // --- Code để xử lý kéo thả thanh chia ---
         const resizer = document.getElementById('resizer');
         const container = document.getElementById('container');
         let isResizing = false;
@@ -119,25 +122,18 @@
         resizer.addEventListener('mousedown', function(e) {
             e.preventDefault();
             isResizing = true;
-            // Thêm sự kiện cho cả trang để bắt việc di chuột và thả chuột
             document.addEventListener('mousemove', handleMouseMove);
             document.addEventListener('mouseup', stopResizing);
         });
 
         function handleMouseMove(e) {
             if (!isResizing) return;
-
-            // Tính toán vị trí mới của thanh chia
             const containerRect = container.getBoundingClientRect();
             const newLeftWidth = e.clientX - containerRect.left;
-
-            // Giới hạn độ rộng tối thiểu để tránh bị co lại quá nhỏ
             if (newLeftWidth > 100 && (containerRect.width - newLeftWidth) > 100) {
                 const totalWidth = container.offsetWidth;
                 const leftWidthPercent = (newLeftWidth / totalWidth) * 100;
                 const rightWidthPercent = 100 - leftWidthPercent;
-
-                // Cập nhật biến CSS
                 container.style.setProperty('--left-width', `${leftWidthPercent}%`);
                 container.style.setProperty('--right-width', `${rightWidthPercent}%`);
             }
@@ -145,7 +141,6 @@
 
         function stopResizing() {
             isResizing = false;
-            // Gỡ bỏ các sự kiện khi đã thả chuột
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', stopResizing);
         }
