@@ -1,227 +1,732 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trình xem PDF (Zoom + Lazy Loading)</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-    <style>
-        body {
-            margin: 0;
-            background-color: #f1f1f1;
-            font-family: sans-serif;
-        }
-        /* -- CSS MỚI CHO THANH CÔNG CỤ -- */
-        #toolbar {
-            padding: 8px;
-            background: #555;
-            text-align: center;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 10px;
-        }
-        #toolbar input {
-            color: white;
-        }
-        #toolbar button {
-            font-weight: bold;
-            font-size: 16px;
-            width: 30px;
-            height: 30px;
-            cursor: pointer;
-        }
-        #toolbar span {
-            color: white;
-            font-size: 14px;
-            min-width: 50px;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mindmap từ văn bản – Chế độ Thuyết trình</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #0f172a;
+      --text: #e2e8f0;
+      --text-dark: #0b1220;
+      --text-light: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #60a5fa;
+      --node-w: 220px;
+      --node-h: auto;
+      --col-gap: 120px;
+      --row-gap: 28px;
+      --radius: 14px;
+      --shadow: 0 8px 24px rgba(0,0,0,.35);
+      --left-panel-width: 420px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1200px 800px at 20% -10%, #1f2937 0%, var(--bg) 60%);
+      color: var(--text);
+    }
+    .app { display: grid; grid-template-columns: var(--left-panel-width) 1fr; gap: 16px; height: 100vh; padding: 16px; transition: grid-template-columns 0.4s ease; }
+    .left { display: flex; flex-direction: column; gap: 12px; transition: transform 0.4s ease, opacity 0.3s ease; position: relative; }
+    .app.panel-closed { grid-template-columns: 0px 1fr; }
+    .app.panel-closed .left { transform: translateX(-100%); opacity: 0; pointer-events: none; }
+    h1 { font-size: 18px; margin: 0 0 2px 0; font-weight: 650; letter-spacing: .2px; color: #f1f5f9; }
+    .help { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    textarea { width: 100%; height: 100%; resize: none; padding: 14px 14px 18px 14px; border-radius: 16px; border: 1px solid #1f2a44; background: linear-gradient(180deg, #0c1425, #0b1220); color: var(--text); outline: none; box-shadow: var(--shadow); line-height: 1.6; caret-color: var(--accent); tab-size: 2; }
+    .right { 
+      position: relative; 
+      border-radius: 16px; 
+      background: linear-gradient(180deg, #0c1425, #0b1220); 
+      border: 1px solid #1f2a44; 
+      overflow: hidden; 
+      box-shadow: var(--shadow); 
+      cursor: grab; 
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+    .right:active { cursor: grabbing; }
+    .canvas { position: relative; min-width: 100%; min-height: 100%; transform-origin: 0 0; }
+    .node { position: absolute; width: var(--node-w); max-width: var(--node-w); padding: 10px 12px; border-radius: var(--radius); border: 1px solid rgba(255,255,255,.08); box-shadow: 0 6px 18px rgba(0,0,0,.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); color: var(--text-dark); font-weight: 600; line-height: 1.45; word-wrap: break-word; overflow-wrap: anywhere; transition: transform .12s ease, opacity .3s ease, background .3s ease; cursor: pointer; }
+    .node:hover { transform: translateY(-1px) scale(1.01); }
+    .node .audio-icon { font-size: 12px; margin-left: 5px; }
+    .svg-layer { position: absolute; inset: 0; pointer-events: none; }
+    .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .btn { background: #0a1222; color: var(--text); border: 1px solid #1f2a44; padding: 8px 10px; border-radius: 10px; font-size: 12px; cursor: pointer; }
+    .btn:hover{ border-color:#2a3b63 }
+    .btn.active { background-color: var(--accent); color: var(--bg); border-color: var(--accent); }
+    .btn.recording { background-color: #ef4444; color: white; border-color: #ef4444; }
+    #panel-toggle-btn { position: fixed; top: 20px; left: calc(var(--left-panel-width) + 4px); z-index: 100; width: 28px; height: 28px; background: #1f2937; color: var(--text); border: 1px solid #2a3b63; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: left 0.4s ease, transform 0.3s ease; }
+    .app.panel-closed + #panel-toggle-btn { left: 10px; transform: scaleX(-1); }
+    
+    #image-container {
+      position: absolute;
+      display: none;
+      top: 100px;
+      left: 100px;
+      width: 200px;
+      height: auto;
+      cursor: move;
+      z-index: 10;
+      border: 2px dashed var(--accent);
+      border-radius: 8px;
+    }
+    #movable-image {
+      width: 100%;
+      height: 100%;
+      display: block;
+      pointer-events: none;
+    }
+    .resize-handle {
+      position: absolute;
+      width: 15px;
+      height: 15px;
+      background: var(--accent);
+      right: -7.5px;
+      bottom: -7.5px;
+      border-radius: 50%;
+      cursor: nwse-resize;
+      border: 2px solid var(--bg);
+    }
 
-        #viewerContainer {
-            width: 100%;
-            height: calc(100vh - 46px); /* Chiều cao trừ đi thanh công cụ */
-            overflow: auto;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        
-        .pageContainer {
-            margin: 20px auto;
-            border: 1px solid black;
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            position: relative;
-        }
-        .textLayer {
-            position: absolute;
-            left: 0;
-            top: 0;
-            right: 0;
-            bottom: 0;
-            color: transparent;
-            cursor: text;
-        }
-        .textLayer > span {
-            position: absolute;
-            white-space: pre;
-            transform-origin: 0% 0%;
-        }
-        
-        .textLayer::selection {
-            background: rgba(255, 255, 0, 0.4);
-        }
+    /* --- CSS MỚI CHO WEBCAM PREVIEW --- */
+    #video-preview {
+      display: none;
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 200px;
+      height: auto;
+      border-radius: 12px;
+      border: 2px solid var(--accent);
+      box-shadow: var(--shadow);
+      z-index: 1001;
+      transform: scaleX(-1); /* Lật ngược webcam cho giống gương */
+    }
 
-        #loadingIndicator {
-            padding: 20px;
-            font-size: 1.2em;
-        }
-    </style>
+    @media (max-width: 1000px) { .app { grid-template-columns: 1fr; height: auto; } .right { height: 70vh; } #panel-toggle-btn { display: none; } }
+  </style>
 </head>
 <body>
-    <div id="toolbar">
-      <input type="file" id="pdf-upload" accept=".pdf">
-      <button id="zoom-out-btn">-</button>
-      <span id="scale-info">150%</span>
-      <button id="zoom-in-btn">+</button>
-      <button id="fit-width-btn" style="width: auto; padding: 0 8px;">Vừa chiều rộng</button>
-    </div>
-
-    <div id="viewerContainer">
-        <div id="loadingIndicator">Vui lòng chọn một tệp PDF để bắt đầu...</div>
-    </div>
-
-    <script>
-    // -- JAVASCRIPT ĐÃ CẬP NHẬT --
-
-    // Thay đổi scale thành biến 'let' và đặt giá trị mặc định hợp lý hơn
-    let scale = 1.5; 
-    const viewerContainer = document.getElementById('viewerContainer');
-    const loadingIndicator = document.getElementById('loadingIndicator');
-    const scaleInfo = document.getElementById('scale-info');
-
-    let pdfDoc = null;
-    let pageNum = 1;
-    let isLoading = false;
-
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-
-    // Hàm vẽ lại tất cả các trang đã hiển thị với tỷ lệ mới
-    function updateAndRerender() {
-        if (!pdfDoc) return;
+  <div class="app" id="app-container">
+    <div class="left">
+      <div class="toolbar">
+        <h1>Mindmap từ văn bản</h1>
+        <button class="btn" id="btnDownload">Tải Mindmap</button>
+        <button class="btn" id="btnImport">Nhập Mindmap</button>
+        <button class="btn" id="btnPresent">Thuyết trình</button>
+        <button class="btn" id="btnChangeBg">Đổi nền</button>
+        <button class="btn" id="btnAddImage">Thêm ảnh</button>
+        <button class="btn" id="btnBgAudio">Nhạc nền</button>
+        <button class="btn" id="btnAddNodeAudio">Gán Âm thanh</button>
+        <button class="btn" id="btnRecord">Ghi hình</button>
         
-        // Lưu lại số trang đã tải
-        const lastPageNum = pageNum;
-        viewerContainer.innerHTML = ''; // Xóa các trang cũ
-        pageNum = 0; // Reset lại số trang
-        
-        // Vẽ lại các trang đã có với tỷ lệ mới
-        for (let i = 1; i <= lastPageNum; i++) {
-            renderPage(i);
-        }
-        scaleInfo.textContent = `${Math.round(scale * 100)}%`;
+        <input type="file" id="importFileInput" accept=".mindmap" style="display: none;">
+        <input type="file" id="bgInput" accept="image/*" style="display: none;">
+        <input type="file" id="imageInput" accept="image/*" style="display: none;">
+        <input type="file" id="bgAudioInput" accept="audio/*" style="display: none;">
+        <input type="file" id="nodeAudioInput" accept="audio/*" style="display: none;">
+      </div>
+      <div class="help">
+        • Ghi hình: Bật webcam và ghi lại màn hình thuyết trình của bạn.
+      </div>
+      <textarea id="editor" spellcheck="false">Học Tiếng Anh
+  Học Ngữ Pháp
+    Thì Hiện tại đơn
+    Thì Quá khứ đơn
+      Chi tiết thì
+  Học Từ Vựng
+    Chủ đề Gia đình
+    Chủ đề Công việc
+  Học Phát Âm
+    Nguyên âm
+    Phụ âm</textarea>
+    </div>
+    <div class="right" id="viewport">
+      <div id="image-container">
+        <img id="movable-image" src="">
+        <div class="resize-handle"></div>
+      </div>
+      <div class="canvas" id="canvas">
+        <svg class="svg-layer" id="wires"></svg>
+      </div>
+    </div>
+  </div>
+  <button id="panel-toggle-btn">«</button>
+  <audio id="background-audio" loop></audio>
+  <video id="video-preview" autoplay muted></video>
+
+  <script>
+    // ... (toàn bộ code JavaScript cũ từ lần trước)
+    const editor = document.getElementById('editor');
+    const canvas = document.getElementById('canvas');
+    const wires = document.getElementById('wires');
+    const viewport = document.getElementById('viewport');
+    const btnDownload = document.getElementById('btnDownload');
+    const btnImport = document.getElementById('btnImport');
+    const importFileInput = document.getElementById('importFileInput');
+    const btnPresent = document.getElementById('btnPresent');
+    const appContainer = document.getElementById('app-container');
+    const panelToggleBtn = document.getElementById('panel-toggle-btn');
+    const btnChangeBg = document.getElementById('btnChangeBg');
+    const bgInput = document.getElementById('bgInput');
+    const btnAddImage = document.getElementById('btnAddImage');
+    const imageInput = document.getElementById('imageInput');
+    const imageContainer = document.getElementById('image-container');
+    const movableImage = document.getElementById('movable-image');
+    const resizeHandle = document.querySelector('.resize-handle');
+    const btnBgAudio = document.getElementById('btnBgAudio');
+    const bgAudioInput = document.getElementById('bgAudioInput');
+    const backgroundAudio = document.getElementById('background-audio');
+    const btnAddNodeAudio = document.getElementById('btnAddNodeAudio');
+    const nodeAudioInput = document.getElementById('nodeAudioInput');
+
+    let scale = 1, panX = 40, panY = 40;
+    let isPanning = false, startPanX = 0, startPanY = 0;
+    let presentationMode = false;
+    let mindmapTree = {};
+    let nodeAudios = {}; 
+    let isAddingNodeAudio = false;
+    let selectedNodeAudioData = null;
+
+    // --- BIẾN MỚI CHO TÍNH NĂNG GHI HÌNH ---
+    const btnRecord = document.getElementById('btnRecord');
+    const videoPreview = document.getElementById('video-preview');
+    let mediaRecorder;
+    let recordedChunks = [];
+    let screenStream;
+    let userStream;
+    let combinedStream;
+    let isRecording = false;
+
+    const ROOT_NODE_PALETTE = ['#d586f4','#c3e9cc','#f3a88f','#a6abe7','#eedc96','#f6f3ce','#aae496'];
+    const MAIN_BRANCH_COLORS = ['#B0E0E6','#FFFACD','#D8BFD8','#FFDAB9','#AAF0D1','#EEDFCC','#FFF5E1'];
+    let rootNodeColor = ROOT_NODE_PALETTE[Math.floor(Math.random()*ROOT_NODE_PALETTE.length)];
+
+    function hexToHsl(hex) {
+      if (!hex) return null;
+      let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      if (!result) return null;
+      let r = parseInt(result[1], 16) / 255, g = parseInt(result[2], 16) / 255, b = parseInt(result[3], 16) / 255;
+      let max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h = 0, s = 0, l = (max + min) / 2;
+      if (max == min) { h = s = 0; } else {
+        let d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) { case r: h = (g - b) / d + (g < b ? 6 : 0); break; case g: h = (b - r) / d + 2; break; case b: h = (r - g) / d + 4; break; }
+        h /= 6;
+      }
+      return { h: h * 360, s: s, l: l };
     }
+    
+    // ... (toàn bộ các hàm cũ không thay đổi: panelToggleBtn, btnPresent, applyTransform, ...)
 
-    function renderPage(num) {
-        isLoading = true;
+    // --- CÁC HÀM MỚI CHO TÍNH NĂNG GHI HÌNH ---
 
-        pdfDoc.getPage(num).then(function(page) {
-            const viewport = page.getViewport({ scale: scale });
-            const pageContainer = document.createElement('div');
-            pageContainer.className = 'pageContainer';
-            pageContainer.style.width = viewport.width + 'px';
-            pageContainer.style.height = viewport.height + 'px';
-
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-
-            pageContainer.appendChild(canvas);
-            viewerContainer.appendChild(pageContainer);
-            
-            const renderContext = {
-                canvasContext: context,
-                viewport: viewport
-            };
-            page.render(renderContext).promise.then(() => page.getTextContent()).then(textContent => {
-                const textLayerDiv = document.createElement('div');
-                textLayerDiv.className = 'textLayer';
-                pageContainer.appendChild(textLayerDiv);
-                pdfjsLib.renderTextLayer({
-                    textContent,
-                    container: textLayerDiv,
-                    viewport,
-                    textDivs: []
-                });
+    async function startRecording() {
+        try {
+            // 1. Lấy stream màn hình
+            screenStream = await navigator.mediaDevices.getDisplayMedia({
+                video: { mediaSource: "screen", width: 1920, height: 1080, frameRate: 30 },
+                audio: false // Chỉ lấy audio từ micro để tránh bị lặp
             });
-            
-            // Cập nhật lại số trang đã vẽ xong
-            if (num > pageNum) {
-                pageNum = num;
+
+            // 2. Lấy stream webcam và micro
+            userStream = await navigator.mediaDevices.getUserMedia({
+                video: { width: 480, height: 270 },
+                audio: true
+            });
+
+            // Hiển thị preview webcam
+            videoPreview.srcObject = userStream;
+            videoPreview.style.display = 'block';
+
+            // 3. Trộn audio từ micro vào stream tổng hợp
+            combinedStream = new MediaStream([
+                ...screenStream.getVideoTracks(),
+                ...userStream.getAudioTracks()
+            ]);
+
+            // 4. Bắt đầu ghi hình stream tổng hợp
+            recordedChunks = [];
+            mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm; codecs=vp9,opus' });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `mindmap-presentation-${new Date().toISOString()}.webm`;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            mediaRecorder.start();
+            isRecording = true;
+            btnRecord.textContent = 'Dừng Ghi';
+            btnRecord.classList.add('recording');
+
+        } catch (error) {
+            console.error("Lỗi khi bắt đầu ghi hình:", error);
+            alert("Không thể bắt đầu ghi hình. Vui lòng cấp quyền truy cập màn hình và webcam.");
+            stopRecording(); // Dọn dẹp nếu có lỗi
+        }
+    }
+
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+        // Dừng tất cả các track để tắt webcam và icon ghi màn hình
+        screenStream?.getTracks().forEach(track => track.stop());
+        userStream?.getTracks().forEach(track => track.stop());
+        
+        videoPreview.style.display = 'none';
+        videoPreview.srcObject = null;
+        isRecording = false;
+        btnRecord.textContent = 'Ghi hình';
+        btnRecord.classList.remove('recording');
+    }
+
+    btnRecord.addEventListener('click', () => {
+        if (isRecording) {
+            stopRecording();
+        } else {
+            startRecording();
+        }
+    });
+
+    // --- KẾT THÚC CÁC HÀM GHI HÌNH ---
+    
+    // ... (toàn bộ code cũ còn lại)
+    panelToggleBtn.addEventListener('click', () => {
+        const leftPanelWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--left-panel-width'));
+        const isOpening = appContainer.classList.contains('panel-closed');
+        canvas.style.transition = 'transform 0.4s ease';
+        imageContainer.style.transition = 'left 0.4s ease';
+        if (isOpening) { panX -= leftPanelWidth; } else { panX += leftPanelWidth; }
+        if (imageContainer.style.display !== 'none') {
+            const currentLeft = parseInt(imageContainer.style.left, 10) || 0;
+            if (isOpening) { imageContainer.style.left = `${currentLeft - leftPanelWidth}px`; } 
+            else { imageContainer.style.left = `${currentLeft + leftPanelWidth}px`; }
+        }
+        appContainer.classList.toggle('panel-closed');
+        applyTransform();
+        setTimeout(() => { canvas.style.transition = 'none'; imageContainer.style.transition = 'none'; }, 400);
+    });
+
+    btnPresent.addEventListener('click', () => {
+        presentationMode = !presentationMode;
+        btnPresent.classList.toggle('active', presentationMode);
+        
+        if (presentationMode && backgroundAudio.src) {
+            backgroundAudio.play().catch(e => console.error("Lỗi phát nhạc nền:", e));
+        } else {
+            backgroundAudio.pause();
+            backgroundAudio.currentTime = 0;
+        }
+
+        function setVisibility(node, level) {
+            node.isVisible = presentationMode ? level <= 0 : true;
+            node.children.forEach(child => setVisibility(child, level + 1));
+        }
+        setVisibility(mindmapTree, -1);
+        triggerUpdate(false);
+    });
+
+    function applyTransform() { canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; }
+
+    viewport.addEventListener('wheel', (e) => {
+      if (e.target.closest('#image-container')) return;
+      e.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top;
+      const mouseBeforeZoomX = (mouseX - panX) / scale, mouseBeforeZoomY = (mouseY - panY) / scale;
+      const newScale = Math.max(0.2, Math.min(3, scale - e.deltaY * 0.001));
+      panX = mouseX - mouseBeforeZoomX * newScale;
+      panY = mouseY - mouseBeforeZoomY * newScale;
+      scale = newScale;
+      applyTransform();
+    });
+
+    viewport.addEventListener('mousedown', (e) => {
+        if (e.target.closest('#image-container') || e.button !== 0) return;
+        isPanning = true;
+        startPanX = e.clientX - panX;
+        startPanY = e.clientY - panY;
+        viewport.style.cursor = 'grabbing';
+    });
+    window.addEventListener('mouseup', () => { isPanning = false; viewport.style.cursor = 'grab'; });
+    window.addEventListener('mousemove', (e) => {
+        if (isPanning) { panX = e.clientX - startPanX; panY = e.clientY - startPanY; applyTransform(); }
+    });
+
+    editor.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = editor.selectionStart, end = editor.selectionEnd;
+        editor.value = editor.value.substring(0, start) + '  ' + editor.value.substring(end);
+        editor.selectionStart = editor.selectionEnd = start + 2;
+        triggerUpdate();
+      }
+    });
+
+    btnDownload.addEventListener('click', () => {
+        const state = {
+            text: editor.value,
+            background: viewport.style.backgroundImage,
+            movableImage: {
+                src: movableImage.src,
+                style: {
+                    display: imageContainer.style.display,
+                    top: imageContainer.style.top,
+                    left: imageContainer.style.left,
+                    width: imageContainer.style.width,
+                    height: imageContainer.style.height,
+                }
+            },
+            presentationMode: presentationMode,
+            panX: panX,
+            panY: panY,
+            scale: scale,
+            backgroundAudioSrc: backgroundAudio.src,
+            nodeAudios: nodeAudios
+        };
+
+        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'mindmap-data.mindmap';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    });
+
+    btnImport.addEventListener('click', () => importFileInput.click());
+    importFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const state = JSON.parse(event.target.result);
+                loadState(state);
+            } catch (error) {
+                console.error("Lỗi khi đọc tệp mindmap:", error);
+                alert("Tệp mindmap không hợp lệ hoặc đã bị lỗi.");
             }
-            isLoading = false;
-        });
-    }
+        };
+        reader.readAsText(file);
+        importFileInput.value = '';
+    });
 
-    function handleScroll() {
-        if (isLoading || !pdfDoc || pageNum >= pdfDoc.numPages) return;
-        if (viewerContainer.scrollTop + viewerContainer.clientHeight >= viewerContainer.scrollHeight - 500) {
-            renderPage(pageNum + 1);
+    function loadState(state) {
+        editor.value = state.text || '';
+        viewport.style.backgroundImage = state.background || '';
+        if (state.movableImage && state.movableImage.src && state.movableImage.src.startsWith('data:image')) {
+            movableImage.src = state.movableImage.src;
+            Object.assign(imageContainer.style, state.movableImage.style);
+        } else {
+            imageContainer.style.display = 'none';
+            movableImage.src = '';
         }
+        presentationMode = state.presentationMode || false;
+        btnPresent.classList.toggle('active', presentationMode);
+        panX = state.panX || 40;
+        panY = state.panY || 40;
+        scale = state.scale || 1;
+        
+        if (state.backgroundAudioSrc && state.backgroundAudioSrc.startsWith('data:audio')) {
+            backgroundAudio.src = state.backgroundAudioSrc;
+        } else {
+            backgroundAudio.src = '';
+        }
+        nodeAudios = state.nodeAudios || {};
+
+        applyTransform();
+        triggerUpdate(true);
     }
 
-    function loadNewPdf(url) {
-        viewerContainer.innerHTML = ''; 
-        viewerContainer.appendChild(loadingIndicator); 
-        loadingIndicator.style.display = 'block';
-        loadingIndicator.textContent = 'Đang tải tệp PDF...';
-        pageNum = 1;
-        pdfDoc = null;
+    btnChangeBg.addEventListener('click', () => bgInput.click());
+    bgInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => { viewport.style.backgroundImage = `url('${event.target.result}')`; };
+        reader.readAsDataURL(file);
+        bgInput.value = '';
+    });
 
-        const loadingTask = pdfjsLib.getDocument(url);
-        loadingTask.promise.then(function(pdfDoc_) {
-            pdfDoc = pdfDoc_;
-            loadingIndicator.style.display = 'none'; 
-            viewerContainer.addEventListener('scroll', handleScroll);
-            renderPage(pageNum);
-            scaleInfo.textContent = `${Math.round(scale * 100)}%`;
-        }, function (reason) {
-            console.error(reason);
-            loadingIndicator.textContent = 'Lỗi khi tải tệp PDF.';
-        });
-    }
+    btnAddImage.addEventListener('click', () => imageInput.click());
+    imageInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            movableImage.src = event.target.result;
+            imageContainer.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+        imageInput.value = '';
+    });
 
-    document.getElementById('pdf-upload').addEventListener('change', function(event) {
-        const file = event.target.files[0];
-        if (file && file.type === 'application/pdf') {
-            const fileURL = URL.createObjectURL(file);
-            loadNewPdf(fileURL);
+    btnBgAudio.addEventListener('click', () => bgAudioInput.click());
+    bgAudioInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            backgroundAudio.src = event.target.result;
+            if (presentationMode) {
+                backgroundAudio.play().catch(err => console.error("Lỗi phát nhạc:", err));
+            }
+        };
+        reader.readAsDataURL(file);
+        bgAudioInput.value = '';
+    });
+    
+    btnAddNodeAudio.addEventListener('click', () => {
+        if(isAddingNodeAudio) {
+            isAddingNodeAudio = false;
+            selectedNodeAudioData = null;
+            btnAddNodeAudio.classList.remove('active');
+            viewport.style.cursor = 'grab';
+        } else {
+            nodeAudioInput.click();
         }
     });
 
-    // -- GÁN SỰ KIỆN CHO CÁC NÚT ZOOM MỚI --
-    document.getElementById('zoom-in-btn').addEventListener('click', () => {
-        scale += 0.25;
-        updateAndRerender();
+    nodeAudioInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            selectedNodeAudioData = event.target.result;
+            isAddingNodeAudio = true;
+            btnAddNodeAudio.classList.add('active');
+            viewport.style.cursor = 'crosshair';
+            alert('Đã chọn âm thanh. Vui lòng nhấp vào một nhánh để gán.');
+        };
+        reader.readAsDataURL(file);
+        nodeAudioInput.value = '';
     });
 
-    document.getElementById('zoom-out-btn').addEventListener('click', () => {
-        if (scale <= 0.25) return;
-        scale -= 0.25;
-        updateAndRerender();
+    let isDragging = false, isResizing = false;
+    let imgOffsetX, imgOffsetY;
+    
+    imageContainer.addEventListener('mousedown', (e) => {
+        if (e.target === resizeHandle) return;
+        e.stopPropagation(); isDragging = true;
+        imgOffsetX = e.clientX - imageContainer.offsetLeft;
+        imgOffsetY = e.clientY - imageContainer.offsetTop;
     });
 
-    document.getElementById('fit-width-btn').addEventListener('click', () => {
-        if (!pdfDoc) return;
-        pdfDoc.getPage(1).then(page => {
-            const unscaledViewport = page.getViewport({ scale: 1 });
-            // Trừ đi một chút lề để không bị sát mép
-            const containerWidth = viewerContainer.clientWidth - 45;
-            scale = containerWidth / unscaledViewport.width;
-            updateAndRerender();
+    resizeHandle.addEventListener('mousedown', (e) => {
+        e.stopPropagation(); isResizing = true;
+        imgOffsetX = e.clientX; imgOffsetY = e.clientY;
+        const initialWidth = imageContainer.offsetWidth, initialHeight = imageContainer.offsetHeight;
+        function resizeImage(event) {
+            if (isResizing) {
+                const dx = event.clientX - imgOffsetX, dy = event.clientY - imgOffsetY;
+                imageContainer.style.width = `${initialWidth + dx}px`;
+                imageContainer.style.height = `${initialHeight + dy}px`;
+            }
+        }
+        function stopResize() {
+            isResizing = false;
+            window.removeEventListener('mousemove', resizeImage);
+            window.removeEventListener('mouseup', stopResize);
+        }
+        window.addEventListener('mousemove', resizeImage);
+        window.addEventListener('mouseup', stopResize);
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+            imageContainer.style.left = `${e.clientX - imgOffsetX}px`;
+            imageContainer.style.top = `${e.clientY - imgOffsetY}px`;
+        }
+    });
+    window.addEventListener('mouseup', () => { isDragging = false; });
+
+    imageContainer.addEventListener('wheel', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const currentWidth = imageContainer.offsetWidth;
+        const scaleFactor = e.deltaY < 0 ? 1.1 : 0.9;
+        imageContainer.style.width = `${currentWidth * scaleFactor}px`;
+        imageContainer.style.height = 'auto'; 
+    });
+
+    function parseLines(text){
+      return text.split(/\r?\n/).map((raw, idx) => {
+          const match = raw.match(/^(\s*)(.*)$/);
+          const level = Math.floor((match ? match[1] : '').replace(/\t/g, '  ').length / 2);
+          const content = (match ? match[2] : raw).trim();
+          return { id: idx, level, text: content };
+        }).filter(n => n.text.length > 0);
+    }
+
+    function buildTree(nodes){
+      const root = { id: 'root', level: -1, children: [], isVisible: true };
+      const stack = [root];
+      nodes.forEach(n => {
+        while (stack.length && stack[stack.length-1].level >= n.level) stack.pop();
+        const parent = stack[stack.length-1] || root;
+        const node = { ...n, children: [], isVisible: !presentationMode || n.level < 1 };
+        parent.children.push(node);
+        stack.push(node);
+      });
+      return root;
+    }
+    
+    function layoutTree(root){
+      const colWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--node-w')) + parseInt(getComputedStyle(document.documentElement).getPropertyValue('--col-gap'));
+      const rowGap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--row-gap'));
+      const positions = new Map(), levelHeights = new Map();
+
+      function calculateY(node, currentY) {
+          const nodeHeight = 20 + Math.ceil(node.text.length / 25) * 24 + 10;
+          let y = currentY;
+          if (levelHeights.has(node.level) && levelHeights.get(node.level) > y) y = levelHeights.get(node.level);
+          positions.set(node.id, { x: node.level * colWidth, y, w: 220, h: nodeHeight });
+          
+          let childY = y;
+          const visibleChildren = node.children.filter(c => c.isVisible);
+          if (visibleChildren.length > 0) {
+              const childrenTotalHeight = visibleChildren.reduce((acc, child) => {
+                  const childHeight = 20 + Math.ceil(child.text.length / 25) * 24 + 10;
+                  return acc + childHeight + rowGap;
+              }, -rowGap);
+              const parentPos = positions.get(node.id);
+              if (childrenTotalHeight > nodeHeight) {
+                  parentPos.y = y + childrenTotalHeight / 2 - parentPos.h / 2;
+                  positions.set(node.id, parentPos);
+              }
+          }
+          for (const child of visibleChildren) childY = calculateY(child, childY);
+          const newY = childY > y ? childY : y + nodeHeight + rowGap;
+          levelHeights.set(node.level, newY);
+          return newY;
+      }
+      let currentY = 0;
+      for(const child of root.children.filter(c => c.isVisible)) currentY = calculateY(child, currentY);
+      let maxX = 0, maxY = 0;
+      positions.forEach(p => { maxX = Math.max(maxX, p.x + p.w); maxY = Math.max(maxY, p.y + p.h); });
+      return { positions, width: maxX + colWidth, height: maxY + rowGap * 2 };
+    }
+    
+    function draw(root, layout){
+      const { positions, width, height } = layout;
+      canvas.style.width = `${width}px`; canvas.style.height = `${height}px`;
+      wires.setAttribute('width', width); wires.setAttribute('height', height); wires.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      wires.innerHTML='';
+      const fragment=document.createDocumentFragment();
+      [...canvas.querySelectorAll('.node')].forEach(n=>n.remove());
+
+      function render(node, parent, branchIndex, baseBranchColor){
+        if(node.id === 'root'){
+          node.children.forEach((child, index) => render(child, node, index, null));
+          return;
+        }
+        if(!node.isVisible) return;
+        
+        let currentBaseColor = baseBranchColor;
+        let finalNodeColor = currentBaseColor;
+        
+        if(node.level === 0){ finalNodeColor = rootNodeColor; } 
+        else if (node.level === 1) {
+            currentBaseColor = MAIN_BRANCH_COLORS[branchIndex % MAIN_BRANCH_COLORS.length];
+            finalNodeColor = currentBaseColor;
+        } else if (node.level > 1) {
+            const baseHsl = hexToHsl(currentBaseColor);
+            if (baseHsl) {
+                let newLightness = baseHsl.l * 100 - (node.level - 1) * 10;
+                newLightness = Math.max(25, newLightness);
+                finalNodeColor = `hsl(${baseHsl.h}, ${baseHsl.s * 100}%, ${newLightness}%)`;
+            }
+        }
+
+        const p = positions.get(node.id);
+        const el = document.createElement('div');
+        el.className = 'node';
+        el.style.left = `${p.x}px`; el.style.top = `${p.y}px`; el.style.height = `${p.h}px`;
+        el.style.background = finalNodeColor;
+        
+        el.textContent = node.text;
+        if (nodeAudios[node.id]) {
+            const icon = document.createElement('span');
+            icon.className = 'audio-icon';
+            icon.textContent = '🎵';
+            el.appendChild(icon);
+        }
+
+        const finalHsl = hexToHsl(finalNodeColor);
+        if(finalHsl && finalHsl.l < 0.65) el.style.color = 'var(--text-light)';
+        else el.style.color = 'var(--text-dark)';
+        
+        if (node.level === 0) { el.style.fontSize = '18px'; el.style.fontWeight = '900'; }
+        
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+
+            if (isAddingNodeAudio && selectedNodeAudioData) {
+                nodeAudios[node.id] = selectedNodeAudioData;
+                isAddingNodeAudio = false;
+                selectedNodeAudioData = null;
+                btnAddNodeAudio.classList.remove('active');
+                viewport.style.cursor = 'grab';
+                triggerUpdate(false);
+                return;
+            }
+
+            if (nodeAudios[node.id]) {
+                new Audio(nodeAudios[node.id]).play();
+            }
+
+            if (presentationMode && node.children.some(c => !c.isVisible)) {
+                node.children.forEach(c => c.isVisible = true);
+                triggerUpdate(false);
+            }
         });
-    });
+        
+        fragment.appendChild(el);
+        if(parent && parent.id!=='root' && parent.isVisible){
+            const a = positions.get(parent.id), p_pos=positions.get(node.id);
+            const [x1, y1, x2, y2] = [a.x+a.w, a.y+a.h/2, p_pos.x, p_pos.y+p_pos.h/2];
+            const dx = Math.max(40, (x2 - x1) / 2);
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`);
+            path.setAttribute('fill', 'none'); path.setAttribute('stroke','rgba(148,163,184,.6)');
+            path.setAttribute('stroke-width','2'); path.setAttribute('stroke-linecap','round');
+            wires.appendChild(path);
+        }
+        
+        node.children.forEach((child, index) => render(child, node, index, currentBaseColor));
+      }
+      render(root, null, 0, null);
+      canvas.insertBefore(fragment, wires);
+    }
 
-    </script>
+    let raf;
+    function triggerUpdate(reparse = true){
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (reparse) { mindmapTree = buildTree(parseLines(editor.value)); }
+        draw(mindmapTree, layoutTree(mindmapTree));
+      });
+    }
+
+    editor.addEventListener('input', () => triggerUpdate());
+    applyTransform();
+    triggerUpdate();
+  </script>
 </body>
 </html>
