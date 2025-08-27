@@ -58,6 +58,7 @@
     .btn { background: #0a1222; color: var(--text); border: 1px solid #1f2a44; padding: 8px 10px; border-radius: 10px; font-size: 12px; cursor: pointer; }
     .btn:hover{ border-color:#2a3b63 }
     .btn.active { background-color: var(--accent); color: var(--bg); border-color: var(--accent); }
+    .btn.recording { background-color: #ef4444; color: white; border-color: #ef4444; }
     #panel-toggle-btn { position: fixed; top: 20px; left: calc(var(--left-panel-width) + 4px); z-index: 100; width: 28px; height: 28px; background: #1f2937; color: var(--text); border: 1px solid #2a3b63; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: left 0.4s ease, transform 0.3s ease; }
     .app.panel-closed + #panel-toggle-btn { left: 10px; transform: scaleX(-1); }
     
@@ -91,6 +92,21 @@
       border: 2px solid var(--bg);
     }
 
+    /* --- CSS MỚI CHO WEBCAM PREVIEW --- */
+    #video-preview {
+      display: none;
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 200px;
+      height: auto;
+      border-radius: 12px;
+      border: 2px solid var(--accent);
+      box-shadow: var(--shadow);
+      z-index: 1001;
+      transform: scaleX(-1); /* Lật ngược webcam cho giống gương */
+    }
+
     @media (max-width: 1000px) { .app { grid-template-columns: 1fr; height: auto; } .right { height: 70vh; } #panel-toggle-btn { display: none; } }
   </style>
 </head>
@@ -106,6 +122,7 @@
         <button class="btn" id="btnAddImage">Thêm ảnh</button>
         <button class="btn" id="btnBgAudio">Nhạc nền</button>
         <button class="btn" id="btnAddNodeAudio">Gán Âm thanh</button>
+        <button class="btn" id="btnRecord">Ghi hình</button>
         
         <input type="file" id="importFileInput" accept=".mindmap" style="display: none;">
         <input type="file" id="bgInput" accept="image/*" style="display: none;">
@@ -114,10 +131,7 @@
         <input type="file" id="nodeAudioInput" accept="audio/*" style="display: none;">
       </div>
       <div class="help">
-        • Mỗi <b>dòng</b> là một nút. Số <b>dấu cách đầu dòng</b> = cấp độ.<br/>
-        • Gõ / xóa: sơ đồ <b>cập nhật ngay</b>. Dùng <kbd>Tab</kbd> để thụt đầu dòng.<br/>
-        • Lăn chuột để <b>phóng to/thu nhỏ</b>, kéo chuột để <b>di chuyển</b>.<br/>
-        • Với ảnh thêm vào: Lăn chuột để <b>phóng to/nhỏ</b>, kéo góc để <b>đổi cỡ</b>.
+        • Ghi hình: Bật webcam và ghi lại màn hình thuyết trình của bạn.
       </div>
       <textarea id="editor" spellcheck="false">Học Tiếng Anh
   Học Ngữ Pháp
@@ -143,8 +157,10 @@
   </div>
   <button id="panel-toggle-btn">«</button>
   <audio id="background-audio" loop></audio>
+  <video id="video-preview" autoplay muted></video>
 
   <script>
+    // ... (toàn bộ code JavaScript cũ từ lần trước)
     const editor = document.getElementById('editor');
     const canvas = document.getElementById('canvas');
     const wires = document.getElementById('wires');
@@ -162,8 +178,6 @@
     const imageContainer = document.getElementById('image-container');
     const movableImage = document.getElementById('movable-image');
     const resizeHandle = document.querySelector('.resize-handle');
-
-    // --- BIẾN VÀ ELEMENT MỚI CHO ÂM THANH ---
     const btnBgAudio = document.getElementById('btnBgAudio');
     const bgAudioInput = document.getElementById('bgAudioInput');
     const backgroundAudio = document.getElementById('background-audio');
@@ -174,10 +188,19 @@
     let isPanning = false, startPanX = 0, startPanY = 0;
     let presentationMode = false;
     let mindmapTree = {};
-    let nodeAudios = {}; // Lưu trữ âm thanh cho từng nút
+    let nodeAudios = {}; 
     let isAddingNodeAudio = false;
     let selectedNodeAudioData = null;
-    // --- KẾT THÚC KHAI BÁO BIẾN MỚI ---
+
+    // --- BIẾN MỚI CHO TÍNH NĂNG GHI HÌNH ---
+    const btnRecord = document.getElementById('btnRecord');
+    const videoPreview = document.getElementById('video-preview');
+    let mediaRecorder;
+    let recordedChunks = [];
+    let screenStream;
+    let userStream;
+    let combinedStream;
+    let isRecording = false;
 
     const ROOT_NODE_PALETTE = ['#d586f4','#c3e9cc','#f3a88f','#a6abe7','#eedc96','#f6f3ce','#aae496'];
     const MAIN_BRANCH_COLORS = ['#B0E0E6','#FFFACD','#D8BFD8','#FFDAB9','#AAF0D1','#EEDFCC','#FFF5E1'];
@@ -199,6 +222,92 @@
       return { h: h * 360, s: s, l: l };
     }
     
+    // ... (toàn bộ các hàm cũ không thay đổi: panelToggleBtn, btnPresent, applyTransform, ...)
+
+    // --- CÁC HÀM MỚI CHO TÍNH NĂNG GHI HÌNH ---
+
+    async function startRecording() {
+        try {
+            // 1. Lấy stream màn hình
+            screenStream = await navigator.mediaDevices.getDisplayMedia({
+                video: { mediaSource: "screen", width: 1920, height: 1080, frameRate: 30 },
+                audio: false // Chỉ lấy audio từ micro để tránh bị lặp
+            });
+
+            // 2. Lấy stream webcam và micro
+            userStream = await navigator.mediaDevices.getUserMedia({
+                video: { width: 480, height: 270 },
+                audio: true
+            });
+
+            // Hiển thị preview webcam
+            videoPreview.srcObject = userStream;
+            videoPreview.style.display = 'block';
+
+            // 3. Trộn audio từ micro vào stream tổng hợp
+            combinedStream = new MediaStream([
+                ...screenStream.getVideoTracks(),
+                ...userStream.getAudioTracks()
+            ]);
+
+            // 4. Bắt đầu ghi hình stream tổng hợp
+            recordedChunks = [];
+            mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm; codecs=vp9,opus' });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `mindmap-presentation-${new Date().toISOString()}.webm`;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            mediaRecorder.start();
+            isRecording = true;
+            btnRecord.textContent = 'Dừng Ghi';
+            btnRecord.classList.add('recording');
+
+        } catch (error) {
+            console.error("Lỗi khi bắt đầu ghi hình:", error);
+            alert("Không thể bắt đầu ghi hình. Vui lòng cấp quyền truy cập màn hình và webcam.");
+            stopRecording(); // Dọn dẹp nếu có lỗi
+        }
+    }
+
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+        // Dừng tất cả các track để tắt webcam và icon ghi màn hình
+        screenStream?.getTracks().forEach(track => track.stop());
+        userStream?.getTracks().forEach(track => track.stop());
+        
+        videoPreview.style.display = 'none';
+        videoPreview.srcObject = null;
+        isRecording = false;
+        btnRecord.textContent = 'Ghi hình';
+        btnRecord.classList.remove('recording');
+    }
+
+    btnRecord.addEventListener('click', () => {
+        if (isRecording) {
+            stopRecording();
+        } else {
+            startRecording();
+        }
+    });
+
+    // --- KẾT THÚC CÁC HÀM GHI HÌNH ---
+    
+    // ... (toàn bộ code cũ còn lại)
     panelToggleBtn.addEventListener('click', () => {
         const leftPanelWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--left-panel-width'));
         const isOpening = appContainer.classList.contains('panel-closed');
@@ -219,14 +328,12 @@
         presentationMode = !presentationMode;
         btnPresent.classList.toggle('active', presentationMode);
         
-        // --- LOGIC NHẠC NỀN KHI THUYẾT TRÌNH ---
         if (presentationMode && backgroundAudio.src) {
             backgroundAudio.play().catch(e => console.error("Lỗi phát nhạc nền:", e));
         } else {
             backgroundAudio.pause();
             backgroundAudio.currentTime = 0;
         }
-        // --- KẾT THÚC LOGIC NHẠC NỀN ---
 
         function setVisibility(node, level) {
             node.isVisible = presentationMode ? level <= 0 : true;
@@ -274,7 +381,6 @@
     });
 
     btnDownload.addEventListener('click', () => {
-        // --- CẬP NHẬT LƯU TRẠNG THÁI VỚI ÂM THANH ---
         const state = {
             text: editor.value,
             background: viewport.style.backgroundImage,
@@ -323,7 +429,6 @@
     });
 
     function loadState(state) {
-        // --- CẬP NHẬT TẢI TRẠNG THÁI VỚI ÂM THANH ---
         editor.value = state.text || '';
         viewport.style.backgroundImage = state.background || '';
         if (state.movableImage && state.movableImage.src && state.movableImage.src.startsWith('data:image')) {
@@ -373,7 +478,6 @@
         imageInput.value = '';
     });
 
-    // --- CÁC HÀM MỚI XỬ LÝ ÂM THANH ---
     btnBgAudio.addEventListener('click', () => bgAudioInput.click());
     bgAudioInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
@@ -381,7 +485,6 @@
         const reader = new FileReader();
         reader.onload = (event) => {
             backgroundAudio.src = event.target.result;
-            // Nếu đang ở chế độ thuyết trình, phát nhạc ngay
             if (presentationMode) {
                 backgroundAudio.play().catch(err => console.error("Lỗi phát nhạc:", err));
             }
@@ -391,12 +494,12 @@
     });
     
     btnAddNodeAudio.addEventListener('click', () => {
-        if(isAddingNodeAudio) { // Hủy chế độ gán âm thanh
+        if(isAddingNodeAudio) {
             isAddingNodeAudio = false;
             selectedNodeAudioData = null;
             btnAddNodeAudio.classList.remove('active');
             viewport.style.cursor = 'grab';
-        } else { // Bắt đầu gán âm thanh
+        } else {
             nodeAudioInput.click();
         }
     });
@@ -415,8 +518,6 @@
         reader.readAsDataURL(file);
         nodeAudioInput.value = '';
     });
-    // --- KẾT THÚC CÁC HÀM MỚI ---
-
 
     let isDragging = false, isResizing = false;
     let imgOffsetX, imgOffsetY;
@@ -559,7 +660,6 @@
         el.style.left = `${p.x}px`; el.style.top = `${p.y}px`; el.style.height = `${p.h}px`;
         el.style.background = finalNodeColor;
         
-        // --- CẬP NHẬT HIỂN THỊ NÚT VỚI ICON ÂM THANH ---
         el.textContent = node.text;
         if (nodeAudios[node.id]) {
             const icon = document.createElement('span');
@@ -574,27 +674,23 @@
         
         if (node.level === 0) { el.style.fontSize = '18px'; el.style.fontWeight = '900'; }
         
-        // --- CẬP NHẬT LOGIC CLICK TRÊN NÚT ---
         el.addEventListener('click', (e) => {
             e.stopPropagation();
 
-            // 1. Chế độ gán âm thanh
             if (isAddingNodeAudio && selectedNodeAudioData) {
                 nodeAudios[node.id] = selectedNodeAudioData;
                 isAddingNodeAudio = false;
                 selectedNodeAudioData = null;
                 btnAddNodeAudio.classList.remove('active');
                 viewport.style.cursor = 'grab';
-                triggerUpdate(false); // Vẽ lại để hiển thị icon
+                triggerUpdate(false);
                 return;
             }
 
-            // 2. Phát âm thanh đã gán
             if (nodeAudios[node.id]) {
                 new Audio(nodeAudios[node.id]).play();
             }
 
-            // 3. Logic thuyết trình
             if (presentationMode && node.children.some(c => !c.isVisible)) {
                 node.children.forEach(c => c.isVisible = true);
                 triggerUpdate(false);
