@@ -50,9 +50,9 @@
     }
     .right:active { cursor: grabbing; }
     .canvas { position: relative; min-width: 100%; min-height: 100%; transform-origin: 0 0; }
-    .node { position: absolute; width: var(--node-w); max-width: var(--node-w); padding: 10px 12px; border-radius: var(--radius); border: 1px solid rgba(255,255,255,.08); box-shadow: 0 6px 18px rgba(0,0,0,.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); color: var(--text-dark); font-weight: 600; line-height: 1.45; word-wrap: break-word; overflow-wrap: anywhere; transition: transform .12s ease, opacity .3s ease, background .3s ease; }
+    .node { position: absolute; width: var(--node-w); max-width: var(--node-w); padding: 10px 12px; border-radius: var(--radius); border: 1px solid rgba(255,255,255,.08); box-shadow: 0 6px 18px rgba(0,0,0,.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); color: var(--text-dark); font-weight: 600; line-height: 1.45; word-wrap: break-word; overflow-wrap: anywhere; transition: transform .12s ease, opacity .3s ease, background .3s ease; cursor: pointer; }
     .node:hover { transform: translateY(-1px) scale(1.01); }
-    .node.presentation-clickable { cursor: pointer; }
+    .node .audio-icon { font-size: 12px; margin-left: 5px; }
     .svg-layer { position: absolute; inset: 0; pointer-events: none; }
     .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .btn { background: #0a1222; color: var(--text); border: 1px solid #1f2a44; padding: 8px 10px; border-radius: 10px; font-size: 12px; cursor: pointer; }
@@ -104,10 +104,14 @@
         <button class="btn" id="btnPresent">Thuyết trình</button>
         <button class="btn" id="btnChangeBg">Đổi nền</button>
         <button class="btn" id="btnAddImage">Thêm ảnh</button>
+        <button class="btn" id="btnBgAudio">Nhạc nền</button>
+        <button class="btn" id="btnAddNodeAudio">Gán Âm thanh</button>
         
         <input type="file" id="importFileInput" accept=".mindmap" style="display: none;">
         <input type="file" id="bgInput" accept="image/*" style="display: none;">
         <input type="file" id="imageInput" accept="image/*" style="display: none;">
+        <input type="file" id="bgAudioInput" accept="audio/*" style="display: none;">
+        <input type="file" id="nodeAudioInput" accept="audio/*" style="display: none;">
       </div>
       <div class="help">
         • Mỗi <b>dòng</b> là một nút. Số <b>dấu cách đầu dòng</b> = cấp độ.<br/>
@@ -138,6 +142,8 @@
     </div>
   </div>
   <button id="panel-toggle-btn">«</button>
+  <audio id="background-audio" loop></audio>
+
   <script>
     const editor = document.getElementById('editor');
     const canvas = document.getElementById('canvas');
@@ -157,10 +163,21 @@
     const movableImage = document.getElementById('movable-image');
     const resizeHandle = document.querySelector('.resize-handle');
 
+    // --- BIẾN VÀ ELEMENT MỚI CHO ÂM THANH ---
+    const btnBgAudio = document.getElementById('btnBgAudio');
+    const bgAudioInput = document.getElementById('bgAudioInput');
+    const backgroundAudio = document.getElementById('background-audio');
+    const btnAddNodeAudio = document.getElementById('btnAddNodeAudio');
+    const nodeAudioInput = document.getElementById('nodeAudioInput');
+
     let scale = 1, panX = 40, panY = 40;
     let isPanning = false, startPanX = 0, startPanY = 0;
     let presentationMode = false;
     let mindmapTree = {};
+    let nodeAudios = {}; // Lưu trữ âm thanh cho từng nút
+    let isAddingNodeAudio = false;
+    let selectedNodeAudioData = null;
+    // --- KẾT THÚC KHAI BÁO BIẾN MỚI ---
 
     const ROOT_NODE_PALETTE = ['#d586f4','#c3e9cc','#f3a88f','#a6abe7','#eedc96','#f6f3ce','#aae496'];
     const MAIN_BRANCH_COLORS = ['#B0E0E6','#FFFACD','#D8BFD8','#FFDAB9','#AAF0D1','#EEDFCC','#FFF5E1'];
@@ -182,46 +199,35 @@
       return { h: h * 360, s: s, l: l };
     }
     
-    // --- START: SỬA LỖI DI CHUYỂN ẢNH KHI THU GỌN PANEL ---
     panelToggleBtn.addEventListener('click', () => {
         const leftPanelWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--left-panel-width'));
         const isOpening = appContainer.classList.contains('panel-closed');
-        
-        // Thêm hiệu ứng chuyển động mượt mà cho canvas và ảnh
         canvas.style.transition = 'transform 0.4s ease';
         imageContainer.style.transition = 'left 0.4s ease';
-
-        // Điều chỉnh vị trí pan của mindmap
-        if (isOpening) {
-            panX -= leftPanelWidth;
-        } else {
-            panX += leftPanelWidth;
-        }
-
-        // Điều chỉnh vị trí của ảnh di động nếu nó đang hiển thị
+        if (isOpening) { panX -= leftPanelWidth; } else { panX += leftPanelWidth; }
         if (imageContainer.style.display !== 'none') {
             const currentLeft = parseInt(imageContainer.style.left, 10) || 0;
-            if (isOpening) {
-                imageContainer.style.left = `${currentLeft - leftPanelWidth}px`;
-            } else {
-                imageContainer.style.left = `${currentLeft + leftPanelWidth}px`;
-            }
+            if (isOpening) { imageContainer.style.left = `${currentLeft - leftPanelWidth}px`; } 
+            else { imageContainer.style.left = `${currentLeft + leftPanelWidth}px`; }
         }
-        
         appContainer.classList.toggle('panel-closed');
         applyTransform();
-
-        // Xóa hiệu ứng chuyển động sau khi hoàn tất để không ảnh hưởng tới thao tác kéo thả
-        setTimeout(() => {
-            canvas.style.transition = 'none';
-            imageContainer.style.transition = 'none';
-        }, 400);
+        setTimeout(() => { canvas.style.transition = 'none'; imageContainer.style.transition = 'none'; }, 400);
     });
-    // --- END: SỬA LỖI DI CHUYỂN ẢNH KHI THU GỌN PANEL ---
 
     btnPresent.addEventListener('click', () => {
         presentationMode = !presentationMode;
         btnPresent.classList.toggle('active', presentationMode);
+        
+        // --- LOGIC NHẠC NỀN KHI THUYẾT TRÌNH ---
+        if (presentationMode && backgroundAudio.src) {
+            backgroundAudio.play().catch(e => console.error("Lỗi phát nhạc nền:", e));
+        } else {
+            backgroundAudio.pause();
+            backgroundAudio.currentTime = 0;
+        }
+        // --- KẾT THÚC LOGIC NHẠC NỀN ---
+
         function setVisibility(node, level) {
             node.isVisible = presentationMode ? level <= 0 : true;
             node.children.forEach(child => setVisibility(child, level + 1));
@@ -268,6 +274,7 @@
     });
 
     btnDownload.addEventListener('click', () => {
+        // --- CẬP NHẬT LƯU TRẠNG THÁI VỚI ÂM THANH ---
         const state = {
             text: editor.value,
             background: viewport.style.backgroundImage,
@@ -284,7 +291,9 @@
             presentationMode: presentationMode,
             panX: panX,
             panY: panY,
-            scale: scale
+            scale: scale,
+            backgroundAudioSrc: backgroundAudio.src,
+            nodeAudios: nodeAudios
         };
 
         const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
@@ -314,6 +323,7 @@
     });
 
     function loadState(state) {
+        // --- CẬP NHẬT TẢI TRẠNG THÁI VỚI ÂM THANH ---
         editor.value = state.text || '';
         viewport.style.backgroundImage = state.background || '';
         if (state.movableImage && state.movableImage.src && state.movableImage.src.startsWith('data:image')) {
@@ -328,6 +338,14 @@
         panX = state.panX || 40;
         panY = state.panY || 40;
         scale = state.scale || 1;
+        
+        if (state.backgroundAudioSrc && state.backgroundAudioSrc.startsWith('data:audio')) {
+            backgroundAudio.src = state.backgroundAudioSrc;
+        } else {
+            backgroundAudio.src = '';
+        }
+        nodeAudios = state.nodeAudios || {};
+
         applyTransform();
         triggerUpdate(true);
     }
@@ -337,9 +355,7 @@
         const file = e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = (event) => {
-            viewport.style.backgroundImage = `url('${event.target.result}')`;
-        };
+        reader.onload = (event) => { viewport.style.backgroundImage = `url('${event.target.result}')`; };
         reader.readAsDataURL(file);
         bgInput.value = '';
     });
@@ -357,29 +373,68 @@
         imageInput.value = '';
     });
 
+    // --- CÁC HÀM MỚI XỬ LÝ ÂM THANH ---
+    btnBgAudio.addEventListener('click', () => bgAudioInput.click());
+    bgAudioInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            backgroundAudio.src = event.target.result;
+            // Nếu đang ở chế độ thuyết trình, phát nhạc ngay
+            if (presentationMode) {
+                backgroundAudio.play().catch(err => console.error("Lỗi phát nhạc:", err));
+            }
+        };
+        reader.readAsDataURL(file);
+        bgAudioInput.value = '';
+    });
+    
+    btnAddNodeAudio.addEventListener('click', () => {
+        if(isAddingNodeAudio) { // Hủy chế độ gán âm thanh
+            isAddingNodeAudio = false;
+            selectedNodeAudioData = null;
+            btnAddNodeAudio.classList.remove('active');
+            viewport.style.cursor = 'grab';
+        } else { // Bắt đầu gán âm thanh
+            nodeAudioInput.click();
+        }
+    });
+
+    nodeAudioInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            selectedNodeAudioData = event.target.result;
+            isAddingNodeAudio = true;
+            btnAddNodeAudio.classList.add('active');
+            viewport.style.cursor = 'crosshair';
+            alert('Đã chọn âm thanh. Vui lòng nhấp vào một nhánh để gán.');
+        };
+        reader.readAsDataURL(file);
+        nodeAudioInput.value = '';
+    });
+    // --- KẾT THÚC CÁC HÀM MỚI ---
+
+
     let isDragging = false, isResizing = false;
     let imgOffsetX, imgOffsetY;
     
     imageContainer.addEventListener('mousedown', (e) => {
         if (e.target === resizeHandle) return;
-        e.stopPropagation();
-        isDragging = true;
+        e.stopPropagation(); isDragging = true;
         imgOffsetX = e.clientX - imageContainer.offsetLeft;
         imgOffsetY = e.clientY - imageContainer.offsetTop;
     });
 
     resizeHandle.addEventListener('mousedown', (e) => {
-        e.stopPropagation();
-        isResizing = true;
-        imgOffsetX = e.clientX;
-        imgOffsetY = e.clientY;
-        const initialWidth = imageContainer.offsetWidth;
-        const initialHeight = imageContainer.offsetHeight;
-
+        e.stopPropagation(); isResizing = true;
+        imgOffsetX = e.clientX; imgOffsetY = e.clientY;
+        const initialWidth = imageContainer.offsetWidth, initialHeight = imageContainer.offsetHeight;
         function resizeImage(event) {
             if (isResizing) {
-                const dx = event.clientX - imgOffsetX;
-                const dy = event.clientY - imgOffsetY;
+                const dx = event.clientX - imgOffsetX, dy = event.clientY - imgOffsetY;
                 imageContainer.style.width = `${initialWidth + dx}px`;
                 imageContainer.style.height = `${initialHeight + dy}px`;
             }
@@ -399,14 +454,10 @@
             imageContainer.style.top = `${e.clientY - imgOffsetY}px`;
         }
     });
-
-    window.addEventListener('mouseup', () => {
-        isDragging = false;
-    });
+    window.addEventListener('mouseup', () => { isDragging = false; });
 
     imageContainer.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+        e.preventDefault(); e.stopPropagation();
         const currentWidth = imageContainer.offsetWidth;
         const scaleFactor = e.deltaY < 0 ? 1.1 : 0.9;
         imageContainer.style.width = `${currentWidth * scaleFactor}px`;
@@ -489,9 +540,8 @@
         let currentBaseColor = baseBranchColor;
         let finalNodeColor = currentBaseColor;
         
-        if(node.level === 0){
-            finalNodeColor = rootNodeColor;
-        } else if (node.level === 1) {
+        if(node.level === 0){ finalNodeColor = rootNodeColor; } 
+        else if (node.level === 1) {
             currentBaseColor = MAIN_BRANCH_COLORS[branchIndex % MAIN_BRANCH_COLORS.length];
             finalNodeColor = currentBaseColor;
         } else if (node.level > 1) {
@@ -508,7 +558,15 @@
         el.className = 'node';
         el.style.left = `${p.x}px`; el.style.top = `${p.y}px`; el.style.height = `${p.h}px`;
         el.style.background = finalNodeColor;
+        
+        // --- CẬP NHẬT HIỂN THỊ NÚT VỚI ICON ÂM THANH ---
         el.textContent = node.text;
+        if (nodeAudios[node.id]) {
+            const icon = document.createElement('span');
+            icon.className = 'audio-icon';
+            icon.textContent = '🎵';
+            el.appendChild(icon);
+        }
 
         const finalHsl = hexToHsl(finalNodeColor);
         if(finalHsl && finalHsl.l < 0.65) el.style.color = 'var(--text-light)';
@@ -516,10 +574,32 @@
         
         if (node.level === 0) { el.style.fontSize = '18px'; el.style.fontWeight = '900'; }
         
-        if (presentationMode && node.children.some(c => !c.isVisible)) {
-            el.classList.add('presentation-clickable');
-            el.onclick = () => { node.children.forEach(c => c.isVisible = true); triggerUpdate(false); };
-        }
+        // --- CẬP NHẬT LOGIC CLICK TRÊN NÚT ---
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+
+            // 1. Chế độ gán âm thanh
+            if (isAddingNodeAudio && selectedNodeAudioData) {
+                nodeAudios[node.id] = selectedNodeAudioData;
+                isAddingNodeAudio = false;
+                selectedNodeAudioData = null;
+                btnAddNodeAudio.classList.remove('active');
+                viewport.style.cursor = 'grab';
+                triggerUpdate(false); // Vẽ lại để hiển thị icon
+                return;
+            }
+
+            // 2. Phát âm thanh đã gán
+            if (nodeAudios[node.id]) {
+                new Audio(nodeAudios[node.id]).play();
+            }
+
+            // 3. Logic thuyết trình
+            if (presentationMode && node.children.some(c => !c.isVisible)) {
+                node.children.forEach(c => c.isVisible = true);
+                triggerUpdate(false);
+            }
+        });
         
         fragment.appendChild(el);
         if(parent && parent.id!=='root' && parent.isVisible){
@@ -528,10 +608,8 @@
             const dx = Math.max(40, (x2 - x1) / 2);
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             path.setAttribute('d', `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`);
-            path.setAttribute('fill', 'none');
-            path.setAttribute('stroke','rgba(148,163,184,.6)');
-            path.setAttribute('stroke-width','2');
-            path.setAttribute('stroke-linecap','round');
+            path.setAttribute('fill', 'none'); path.setAttribute('stroke','rgba(148,163,184,.6)');
+            path.setAttribute('stroke-width','2'); path.setAttribute('stroke-linecap','round');
             wires.appendChild(path);
         }
         
